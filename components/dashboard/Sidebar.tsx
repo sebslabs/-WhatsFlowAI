@@ -19,7 +19,9 @@ import {
   Workflow,
   Bot,
   ShoppingBag,
+  Sliders,
 } from "lucide-react";
+
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/context/SidebarContext";
@@ -31,17 +33,18 @@ const navCategories = [
     items: [
       { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
       { label: "Leads", href: "/dashboard/leads", icon: Users },
-      { label: "Conversations", href: "/dashboard/conversations", icon: WhatsAppIcon },
+      { label: "Conversations", href: "/dashboard/conversations", icon: MessageSquare },
     ],
   },
   {
     category: "AI & Automation",
     items: [
-      { label: "AI Agents", href: "/dashboard/ai-agents", icon: Bot },
-      { label: "Automation", href: "/dashboard/automation", icon: Workflow },
-      { label: "Knowledge Base", href: "/dashboard/knowledge", icon: BookOpen },
+      { label: "AI Agents",      href: "/dashboard/ai-agents",    icon: Bot },
+      { label: "Automation",     href: "/dashboard/automation",   icon: Workflow },
+      { label: "Knowledge Base", href: "/dashboard/knowledge",    icon: BookOpen },
     ],
   },
+
   {
     category: "Marketing",
     items: [
@@ -66,20 +69,36 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { isCollapsed, toggleSidebar } = useSidebar();
-  const [user, setUser] = useState<{ email?: string; name?: string } | null>(null);
+  const [user, setUser] = useState<{ email?: string; name?: string; avatarUrl?: string } | null>(null);
 
   useEffect(() => {
     async function fetchUser() {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, email, avatar_url")
+          .eq("id", authUser.id)
+          .maybeSingle();
+
         setUser({
-          email: user.email,
-          name: user.user_metadata?.full_name || user.email?.split('@')[0] || "User",
+          email: authUser.email,
+          name: profile?.full_name || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || "User",
+          avatarUrl: profile?.avatar_url || "",
         });
       }
     }
     fetchUser();
+
+    // Dynamically synchronize profile updates in the Sidebar in real-time
+    const handleProfileUpdate = () => {
+      fetchUser();
+    };
+    window.addEventListener('profile-updated', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('profile-updated', handleProfileUpdate);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -217,8 +236,12 @@ export function Sidebar() {
           "flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-[#F9FAFB] dark:hover:bg-[#0B0F1A] transition-colors cursor-pointer group relative",
           isCollapsed && "justify-center px-0"
         )}>
-          <div className="w-9 h-9 rounded-full bg-[#22C55E] flex items-center justify-center shrink-0 shadow-sm text-white font-bold">
-            {initials}
+          <div className="w-9 h-9 rounded-full bg-[#22C55E] flex items-center justify-center shrink-0 shadow-sm text-white font-bold overflow-hidden">
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt={user.name || "User"} className="w-full h-full object-cover" />
+            ) : (
+              initials
+            )}
           </div>
           {!isCollapsed && (
             <>

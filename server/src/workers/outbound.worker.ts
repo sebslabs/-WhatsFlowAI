@@ -90,6 +90,7 @@ const outboundWorker = createWorker<OutboundMessageJob>(
           case 'image':
           case 'document':
           case 'video':
+          case 'audio':
             result = await WhatsAppService.sendMedia(
               data.tenantId,
               data.phoneNumber,
@@ -116,16 +117,34 @@ const outboundWorker = createWorker<OutboundMessageJob>(
             last_error:   null,
           }).eq('idempotency_key', data.idempotencyKey)
 
-          // Insert the AI/agent message into messages table for audit trail
-          await supabase.from('messages').insert({
-            tenant_id:       data.tenantId,
-            conversation_id: data.conversationId,
-            sender_type:     'ai',
-            content:         data.content,
-            message_type:    data.messageType === 'template' ? 'template' : 'text',
-            wa_message_id:   result.waMessageId,
-            delivery_status: 'sent',
-          })
+          // Update the existing AI/agent message with the wa_message_id to avoid duplicates
+          const { data: matchedMsg } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('conversation_id', data.conversationId)
+            .is('wa_message_id', null)
+            .eq('content', data.content)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          if (matchedMsg) {
+            await supabase.from('messages').update({
+              wa_message_id: result.waMessageId,
+              delivery_status: 'sent'
+            }).eq('id', matchedMsg.id)
+          } else {
+            // Fallback just in case caller didn't insert
+            await supabase.from('messages').insert({
+              tenant_id:       data.tenantId,
+              conversation_id: data.conversationId,
+              sender_type:     'ai',
+              content:         data.content,
+              message_type:    data.messageType === 'template' ? 'template' : 'text',
+              wa_message_id:   result.waMessageId,
+              delivery_status: 'sent',
+            })
+          }
 
           logger.info('[outbound] Message sent successfully', {
             waMessageId: result.waMessageId,

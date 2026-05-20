@@ -1,0 +1,13 @@
+version: 0.2
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 984312272694.dkr.ecr.eu-north-1.amazonaws.com
+  build:
+    commands:
+      - cd server
+      - docker build -t whatsflow-backend .
+  post_build:
+    commands:
+      - docker tag whatsflow-backend:latest 984312272694.dkr.ecr.eu-north-1.amazonaws.com/whatsflow-backend:latest
+      - docker push 984312272694.dkr.ecr.eu-north-1.amazonaws.com/whatsflow-backend:latest

@@ -8,6 +8,8 @@ import { createServer } from 'http'
 
 import webhookRoutes from './routes/webhook.routes.js'
 import apiRoutes from './routes/api.routes.js'
+import internalRoutes from './routes/internal.routes.js'
+import scrapeRoutes from './routes/scrape.routes.js'
 import { correlationMiddleware, latencyMiddleware } from './middleware/correlation.middleware.js'
 import { validateStartup } from './lib/startup.validator.js'
 import { createRealtimeServer } from './lib/realtime.js'
@@ -15,6 +17,9 @@ import { logger } from './utils/logger.js'
 import { renderPrometheusMetrics, startQueueMetricsCollection, metrics, METRICS } from './utils/metrics.js'
 import { getAllCircuitStats } from './utils/circuit-breaker.js'
 import { initSentry, sentryErrorHandler } from './utils/sentry.js'
+import './workers/baileys.worker.js'
+import './workers/scrape.worker.js' // Start the scraper BullMQ worker on boot
+
 
 dotenv.config()
 
@@ -45,13 +50,37 @@ app.use(
 )
 
 // ── CORS — strict allowlist ───────────────────────────────────────────────────
-const allowedOrigins = (process.env.ALLOWED_ORIGIN ?? '').split(',').map((o) => o.trim()).filter(Boolean)
+// MEDIUM FIX (#3): Origin header is now REQUIRED in production.
+// Previously, requests without an Origin header (e.g. curl, server-to-server abuse)
+// bypassed the CORS check entirely. Now they are blocked in production.
+const envOrigins = (process.env.ALLOWED_ORIGIN ?? '').split(',').map((o) => o.trim()).filter(Boolean)
+const allowedOrigins =
+  envOrigins.length > 0
+    ? envOrigins
+    : ['http://localhost:3000', 'http://127.0.0.1:3000']
 
 app.use(
   cors({
     origin: (origin, cb) => {
-      if (!origin) return cb(null, true)   // server-to-server or health checks
-      if (allowedOrigins.includes(origin)) return cb(null, true)
+      // No Origin header received
+      if (!origin) {
+        // In production, all browser requests must include Origin; reject absent ones.
+        // Server-to-server calls that legitimately lack an Origin must use the
+        // /api/internal path (validated by x-internal-key instead).
+        if (process.env.NODE_ENV === 'production') {
+          cb(new Error('CORS: Origin header is required in production'))
+          return
+        }
+        // In development/test, allow origin-less requests (Postman, curl, health checks)
+        cb(null, true)
+        return
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        cb(null, true)
+        return
+      }
+
       cb(new Error(`CORS: origin ${origin} not in allowlist`))
     },
     credentials: true,
@@ -93,6 +122,8 @@ app.use((req, res, next) => {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/webhook', webhookRoutes)
+app.use('/api/internal', internalRoutes)
+app.use('/api/scrape', scrapeRoutes)
 app.use('/api', apiRoutes)
 
 // ── Health Check ──────────────────────────────────────────────────────────────
@@ -143,9 +174,12 @@ app.use((_req, res) => {
 app.use(await sentryErrorHandler())
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  logger.error('Unhandled error', { err: err.message })
+  logger.error('Unhandled server exception', { err: err.message, stack: err.stack })
   const status = (err as NodeJS.ErrnoException).code === 'CORS' ? 403 : 500
-  res.status(status).json({ error: 'Internal server error' })
+  res.status(status).json({
+    error: 'Internal server error',
+    code: 'GENERIC_ERROR',
+  })
 })
 
 // ── HTTP + WebSocket Server ───────────────────────────────────────────────────

@@ -44,6 +44,10 @@ jobs:
         run: npx tsc --noEmit
         working-directory: .
 
+      - name: Unit tests (Vitest)
+        run: npm test
+        working-directory: .
+
   # ── 2. Security Audit ─────────────────────────────────────────────────────────
   security:
     name: Security Audit
@@ -57,15 +61,18 @@ jobs:
           cache: npm
           cache-dependency-path: server/package-lock.json
 
-      - name: npm audit (server)
+      # MEDIUM FIX (#8): npm audit now BLOCKS deployment on high/critical CVEs.
+      # The pipeline will exit non-zero if any high/critical vulnerability is found.
+      # Moderate/low vulnerabilities are reported as warnings via --audit-level=high
+      # (they still show in output but do not fail the step).
+      - name: npm audit (server) — block on high/critical CVEs
         run: npm audit --audit-level=high
         working-directory: server
-        continue-on-error: true   # Report but don't fail on moderate
+        # continue-on-error removed: high/critical CVEs must block the pipeline
 
-      - name: npm audit (frontend)
+      - name: npm audit (frontend) — block on high/critical CVEs
         run: npm audit --audit-level=high
         working-directory: .
-        continue-on-error: true
 
       - name: Check for hardcoded secrets
         uses: trufflesecurity/trufflehog@main
@@ -186,7 +193,7 @@ jobs:
     name: Deploy → Staging
     runs-on: ubuntu-latest
     needs: [validate, docker-build, migrations]
-    if: github.ref == 'refs/heads/staging' && github.event_name == 'push' && secrets.FLY_API_TOKEN != ''
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
     environment:
       name: staging
       url: ${{ vars.STAGING_URL }}
@@ -205,7 +212,7 @@ jobs:
     name: Deploy → Production
     runs-on: ubuntu-latest
     needs: [validate, docker-build, migrations]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && secrets.FLY_API_TOKEN != ''
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: production
       url: ${{ vars.PRODUCTION_URL }}

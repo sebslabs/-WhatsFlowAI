@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, forwardRef } from "react";
 import { CheckCircle2, XCircle, Info, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToastStore } from "@/hooks/use-toast";
 import type { ToastItem } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-function ToastNotification({ toast }: { toast: ToastItem }) {
+const ToastNotification = forwardRef<HTMLDivElement, { toast: ToastItem }>(({ toast }, ref) => {
   const iconMap = {
     success: <CheckCircle2 className="w-4 h-4 text-[#16A34A] shrink-0" />,
     error: <XCircle className="w-4 h-4 text-red-500 shrink-0" />,
@@ -22,6 +22,7 @@ function ToastNotification({ toast }: { toast: ToastItem }) {
 
   return (
     <motion.div
+      ref={ref}
       layout
       initial={{ opacity: 0, x: 60, scale: 0.95 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -38,7 +39,8 @@ function ToastNotification({ toast }: { toast: ToastItem }) {
       </p>
     </motion.div>
   );
-}
+});
+ToastNotification.displayName = "ToastNotification";
 
 export function Toaster() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);

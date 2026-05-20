@@ -59,9 +59,10 @@ export class APIController {
     const conversationId = req.params.conversationId ?? req.params.leadId
     try {
       const db = APIController.tenantDb(req)
+      // PERFORMANCE FIX: Explicit columns — avoids select('*') over-fetch
       const { data, error } = await db
         .from('messages')
-        .select('*')
+        .select('id, tenant_id, conversation_id, sender_type, content, message_type, media_url, wa_message_id, delivery_status, created_at')
         .eq('conversation_id', conversationId)     // ← FIXED: was lead_id
         .order('created_at', { ascending: true })  // ← FIXED: was timestamp
 
@@ -79,7 +80,7 @@ export class APIController {
       const { count: bookedLeads } = await db
         .from('leads')
         .select('*', { count: 'exact', head: true })
-        .eq('stage', 'Booked')
+        .ilike('stage', 'booked')
       const { count: activeChats } = await db
         .from('conversations')
         .select('*', { count: 'exact', head: true })
@@ -102,7 +103,10 @@ export class APIController {
   static async getLeads(req: Request, res: Response) {
     try {
       const db = APIController.tenantDb(req)
-      const { data, error } = await db.from('leads').select('*').order('created_at', { ascending: false })
+      const { data, error } = await db
+        .from('leads')
+        .select('id, name, phone, email, stage, source, contact_id, assigned_to, tags, notes, created_at, updated_at')
+        .order('created_at', { ascending: false })
 
       if (error) throw error
       res.json(data)
@@ -115,7 +119,10 @@ export class APIController {
     try {
       const db = APIController.tenantDb(req)
       // FIXED: use chatbot_flows (not the old flows table)
-      const { data, error } = await db.from('chatbot_flows').select('*').order('created_at', { ascending: false })
+      const { data, error } = await db
+        .from('chatbot_flows')
+        .select('id, name, trigger_type, trigger_value, steps, status, created_at, updated_at')
+        .order('created_at', { ascending: false })
 
       if (error) throw error
       res.json(data)
@@ -127,7 +134,10 @@ export class APIController {
   static async getCampaigns(req: Request, res: Response) {
     try {
       const db = APIController.tenantDb(req)
-      const { data, error } = await db.from('campaigns').select('*').order('created_at', { ascending: false })
+      const { data, error } = await db
+        .from('campaigns')
+        .select('id, name, status, audience_type, audience_tag, message, scheduled_at, sent_at, created_at')
+        .order('created_at', { ascending: false })
 
       if (error) throw error
       res.json(data)
@@ -210,7 +220,7 @@ export class APIController {
       if (leadError) throw leadError
 
       const totalLeads = leads?.length || 0
-      const bookedLeads = leads?.filter((l) => l.stage === 'Booked').length || 0
+      const bookedLeads = leads?.filter((l) => l.stage?.toLowerCase() === 'booked').length || 0
       const conversionRate = totalLeads > 0 ? ((bookedLeads / totalLeads) * 100).toFixed(1) : '0'
 
       // 2. Daily Stats (last 7 days)
@@ -233,7 +243,7 @@ export class APIController {
           const dayName = days[d.getDay()]!
           if (dailyCounts[dayName]) {
              dailyCounts[dayName].leads += 1
-             if (l.stage === 'Booked') {
+             if (l.stage?.toLowerCase() === 'booked') {
                dailyCounts[dayName].conversions += 1
              }
           }
@@ -265,7 +275,14 @@ export class APIController {
       
       leads?.forEach(l => {
         if (l.stage) {
-          stageCounts[l.stage] = (stageCounts[l.stage] || 0) + 1
+          const norm = l.stage.toLowerCase()
+          let matchedStage = l.stage
+          if (norm === 'new') matchedStage = 'New'
+          else if (norm === 'contacted') matchedStage = 'Contacted'
+          else if (norm === 'qualified') matchedStage = 'Qualified'
+          else if (norm === 'proposal') matchedStage = 'Proposal'
+          else if (norm === 'booked') matchedStage = 'Booked'
+          stageCounts[matchedStage] = (stageCounts[matchedStage] || 0) + 1
         }
       })
 
@@ -689,7 +706,7 @@ export class APIController {
             instructions: instructions ?? 'You are a helpful assistant.',
             is_active: true,
             tenant_id: tenantId,
-            model: model || 'gemini-1.5-flash',
+            model: model || 'mistral',
             temperature: parseFloat(temperature ?? '0.7'),
           },
         ])
@@ -794,7 +811,8 @@ export class APIController {
           (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string'
       )
 
-      const reply = await AIService.getAgentResponse(message, systemPrompt, safeHistory, agent.model)
+      const modelStr = (agent.metadata?.full_model as string) || agent.model || 'mistral-large-latest'
+      const reply = await AIService.getAgentResponse(message, systemPrompt, safeHistory, modelStr, orgId, agent.id)
       res.json({ reply })
     } catch (error) {
       sendSafeError(res, error)

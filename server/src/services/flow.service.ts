@@ -53,13 +53,13 @@ export class FlowService {
 
     switch (step.type) {
       case 'message': {
-        await FlowService.sendMessage(db, tenantId, conversationId, step.message ?? '')
+        await FlowService.sendMessage(db, tenantId, conversationId, contactId, step.message ?? '', 'ai', flowId, stepIndex)
         await FlowService.processFlow(db, tenantId, contactId, conversationId, message, flowId, stepIndex + 1)
         break
       }
 
       case 'question': {
-        await FlowService.sendMessage(db, tenantId, conversationId, step.message ?? '')
+        await FlowService.sendMessage(db, tenantId, conversationId, contactId, step.message ?? '', 'ai', flowId, stepIndex)
         // Save flow state — wait for user reply
         await FlowService.saveFlowState(db, tenantId, contactId, flowId, stepIndex)
         break
@@ -68,7 +68,7 @@ export class FlowService {
       case 'buttons': {
         const text = step.message ?? ''
         const buttonLabels = (step.buttons ?? []).map((b) => b.label).join(' | ')
-        await FlowService.sendMessage(db, tenantId, conversationId, `${text}\n\n${buttonLabels}`)
+        await FlowService.sendMessage(db, tenantId, conversationId, contactId, `${text}\n\n${buttonLabels}`, 'ai', flowId, stepIndex)
         await FlowService.saveFlowState(db, tenantId, contactId, flowId, stepIndex)
         break
       }
@@ -81,8 +81,44 @@ export class FlowService {
       }
 
       case 'ai_agent': {
-        const reply = await AIService.getGeminiResponse(message, step.aiPrompt ?? '')
-        await FlowService.sendMessage(db, tenantId, conversationId, reply)
+        const { data: agents } = await db
+          .from('ai_agents')
+          .select('id, name, role, tone, instructions, model, metadata')
+          .eq('tenant_id', tenantId)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        const agent = agents?.[0]
+        const flowExtra = step.aiPrompt ? `\n\nFlow step context:\n${step.aiPrompt}` : ''
+        const systemPrompt = agent
+          ? `You are "${agent.name ?? 'Assistant'}".\n${agent.instructions ?? 'Be helpful.'}${flowExtra}`
+          : `You are a helpful business assistant.${flowExtra}`
+
+        const modelStr =
+          (agent?.metadata as Record<string, string> | undefined)?.full_model ||
+          agent?.model ||
+          'mistral-large-latest'
+
+        const reply = await AIService.getAgentResponse(
+          message,
+          systemPrompt,
+          [],
+          modelStr,
+          tenantId,
+          agent?.id
+        )
+
+        await FlowService.sendMessage(
+          db,
+          tenantId,
+          conversationId,
+          contactId,
+          reply || 'How can I help you further?',
+          'ai',
+          flowId,
+          stepIndex
+        )
         await FlowService.processFlow(db, tenantId, contactId, conversationId, message, flowId, stepIndex + 1)
         break
       }
@@ -127,8 +163,11 @@ export class FlowService {
             db,
             tenantId,
             conversationId,
+            contactId,
             `[HANDOVER] ${step.handoverNote}`,
-            'system'
+            'system',
+            flowId,
+            stepIndex
           )
         }
         await FlowService.clearFlowState(db, tenantId, contactId)
@@ -137,7 +176,7 @@ export class FlowService {
 
       case 'end': {
         if (step.endMessage) {
-          await FlowService.sendMessage(db, tenantId, conversationId, step.endMessage)
+          await FlowService.sendMessage(db, tenantId, conversationId, contactId, step.endMessage, 'ai', flowId, stepIndex)
         }
         if (step.endLeadStage) {
           await db
@@ -186,6 +225,63 @@ export class FlowService {
     return null
   }
 
+  /**
+   * Welcome flows should run only on the first customer message in a conversation,
+   * not on every inbound message (which would block the AI agent entirely).
+   */
+  static async shouldTriggerWelcomeFlow(
+    db: SupabaseClient,
+    tenantId: string,
+    conversationId: string
+  ): Promise<string | null> {
+    const welcomeFlowId = await FlowService.findWelcomeFlow(db, tenantId)
+    if (!welcomeFlowId) return null
+
+    try {
+      const { data: conv } = await db
+        .from('conversations')
+        .select('contact_id')
+        .eq('id', conversationId)
+        .maybeSingle()
+
+      if (conv?.contact_id) {
+        const { data: lead } = await db
+          .from('leads')
+          .select('conversation_count, is_first_message, metadata')
+          .eq('contact_id', conv.contact_id)
+          .eq('tenant_id', tenantId)
+          .maybeSingle()
+
+        if (lead) {
+          const metadata = (lead.metadata || {}) as Record<string, any>
+          const conversationCount = Number(lead.conversation_count ?? metadata.conversation_count ?? 1)
+          const isFirstMessage = Boolean(lead.is_first_message ?? metadata.is_first_message ?? true)
+          if (conversationCount === 1 || isFirstMessage === true) {
+            return welcomeFlowId
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('[FlowService] Welcome flow lead property check failed safely:', err.message)
+    }
+
+    const { count, error } = await db
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('conversation_id', conversationId)
+      .in('sender_type', ['user', 'customer'])
+
+    if (error) {
+      console.warn('[FlowService] Welcome flow user message count failed:', error.message)
+      return null
+    }
+
+    // Inbound message is already persisted when the worker runs — first message => count 1
+    if ((count ?? 0) <= 1) return welcomeFlowId
+    return null
+  }
+
   /** Find the first_message trigger flow for a tenant */
   static async findWelcomeFlow(
     db: SupabaseClient,
@@ -211,24 +307,44 @@ export class FlowService {
     return null
   }
 
-  /** Insert an AI/system message into a conversation */
+  /** Insert an AI/system message into a conversation and transmit it */
   private static async sendMessage(
     db: SupabaseClient,
     tenantId: string,
     conversationId: string,
+    contactId: string,
     content: string,
-    senderType: 'ai' | 'system' = 'ai'
+    senderType: 'ai' | 'system' = 'ai',
+    flowId?: string,
+    stepIndex?: number
   ): Promise<void> {
-    const { error } = await db.from('messages').insert({
+    // 1. Fetch contact's phone number
+    const { data: contact, error: contactErr } = await db
+      .from('contacts')
+      .select('phone_number, phone')
+      .eq('id', contactId)
+      .single()
+
+    const contactPhone = (contact?.phone_number || (contact as { phone?: string })?.phone || '')
+      .replace(/\D/g, '')
+
+    if (contactErr || !contactPhone) {
+      console.error(`[FlowService.sendMessage] Contact phone resolution failed: ${contactErr?.message}`)
+      return
+    }
+
+    // 2. Insert message into logs
+    const { data: insertedMsg, error } = await db.from('messages').insert({
       tenant_id: tenantId,
       conversation_id: conversationId,
       sender_type: senderType,
       content,
       message_type: 'text',
-    })
+      delivery_status: 'sent'
+    }).select().single()
 
     if (error) {
-      console.error(`[FlowService.sendMessage] ${error.message}`)
+      console.error(`[FlowService.sendMessage] Message log failed: ${error.message}`)
     }
 
     // Touch last_message_at
@@ -236,6 +352,58 @@ export class FlowService {
       .from('conversations')
       .update({ last_message_at: new Date().toISOString() })
       .eq('id', conversationId)
+
+    // Check if the tenant has an active Baileys QR session. If so, route through Baileys.
+    const { data: session } = await db
+      .from('whatsapp_qr_sessions')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'connected')
+      .maybeSingle()
+
+    if (session) {
+      const nextjsUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://127.0.0.1:3000'}/api/internal/baileys/send`
+      const internalKey = process.env.INTERNAL_API_KEY || ''
+      try {
+        const res = await fetch(nextjsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Key': internalKey,
+            'x-internal-secret': process.env.WEBHOOK_INTERNAL_SECRET || '',
+          },
+          body: JSON.stringify({
+            tenantId,
+            sessionId: session.id,
+            jid: `${contactPhone}@s.whatsapp.net`,
+            text: content,
+          }),
+        })
+        if (!res.ok) {
+          throw new Error(`Baileys flow send returned HTTP ${res.status}`)
+        }
+        console.log(`[FlowService] Outbound flow message successfully dispatched via Baileys for ${contactPhone}`)
+      } catch (err: any) {
+        console.error(`[FlowService] Baileys flow send failed:`, err.message)
+      }
+    } else {
+      // Trigger standard BullMQ outbound dispatch for Meta Cloud API
+      try {
+        const { enqueueOutbound } = await import('./queue.enterprise.js')
+        await enqueueOutbound({
+          tenantId,
+          conversationId,
+          phoneNumber: contactPhone,
+          content,
+          messageType: 'text',
+          idempotencyKey: `flow-${flowId ?? 'gen'}-${stepIndex ?? Date.now()}-${insertedMsg?.id ?? Date.now()}`,
+          waAccountId: tenantId,
+        })
+        console.log(`[FlowService] Outbound message enqueued successfully for ${contactPhone}`)
+      } catch (enqueueErr: any) {
+        console.error(`[FlowService] Outbound enqueue failed:`, enqueueErr.message)
+      }
+    }
   }
 
   /** Persist flow execution state onto the lead record */

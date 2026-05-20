@@ -51,7 +51,14 @@ let _io: SocketIOServer | null = null
 export async function createRealtimeServer(httpServer: HttpServer): Promise<SocketIOServer> {
   if (_io) return _io
 
-  const allowedOrigins = (process.env.ALLOWED_ORIGIN ?? '').split(',').map((o) => o.trim())
+  const envOrigins = (process.env.ALLOWED_ORIGIN ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean)
+  const allowedOrigins =
+    envOrigins.length > 0
+      ? envOrigins
+      : ['http://localhost:3000', 'http://127.0.0.1:3000']
   const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379'
 
   // Two Redis clients needed for pub/sub adapter (publish + subscribe channels)
@@ -70,7 +77,7 @@ export async function createRealtimeServer(httpServer: HttpServer): Promise<Sock
 
   _io = new SocketIOServer(httpServer, {
     cors: { origin: allowedOrigins, credentials: true },
-    transports: ['websocket', 'polling'],
+    transports: ['websocket'],
     // Ping timeout — detect dead connections quickly
     pingTimeout: 10_000,
     pingInterval: 25_000,
@@ -148,6 +155,39 @@ export async function createRealtimeServer(httpServer: HttpServer): Promise<Sock
     const tenantRoom = `tenant_${tenantId}`
     socket.join(tenantRoom)
 
+    const joinConversationRoom = (conversationId: string) => {
+      verifyConversationAccess(supabase, tenantId, conversationId).then((allowed) => {
+        if (allowed) {
+          socket.join(`conv_${conversationId}`)
+          socket.join(`conversation_${conversationId}`)
+          logger.debug('[realtime] Joined conversation room', { socketId: socket.id, conversationId })
+        } else {
+          socket.emit('error', { code: 'FORBIDDEN', message: 'Access denied' })
+        }
+      })
+    }
+
+    // ── Event: join (tenant + optional conversation) ───────────────────────
+    socket.on('join', (payload: unknown) => {
+      if (isRateLimited(socket.id)) {
+        socket.emit('error', { code: 'RATE_LIMITED', message: 'Too many events' })
+        return
+      }
+
+      const body = payload as { tenant_id?: string; conversation_id?: string } | null
+      if (body?.tenant_id && body.tenant_id !== tenantId) {
+        socket.emit('error', { code: 'FORBIDDEN', message: 'Tenant mismatch' })
+        return
+      }
+
+      socket.join(tenantRoom)
+
+      const convId = body?.conversation_id
+      if (convId && /^[0-9a-f-]{36}$/i.test(convId)) {
+        joinConversationRoom(convId)
+      }
+    })
+
     // ── Event: join_conversation ────────────────────────────────────────────
     socket.on('join_conversation', (conversationId: unknown) => {
       if (isRateLimited(socket.id)) {
@@ -160,15 +200,7 @@ export async function createRealtimeServer(httpServer: HttpServer): Promise<Sock
         return
       }
 
-      // Security: verify the conversation belongs to the tenant before joining
-      verifyConversationAccess(supabase, tenantId, conversationId).then((allowed) => {
-        if (allowed) {
-          socket.join(`conv_${conversationId}`)
-          logger.debug('[realtime] Joined conversation room', { socketId: socket.id, conversationId })
-        } else {
-          socket.emit('error', { code: 'FORBIDDEN', message: 'Access denied' })
-        }
-      })
+      joinConversationRoom(conversationId)
     })
 
     // ── Event: leave_conversation ───────────────────────────────────────────
@@ -197,6 +229,7 @@ export function emitToTenant(tenantId: string, event: string, data: unknown): vo
 
 export function emitToConversation(conversationId: string, event: string, data: unknown): void {
   _io?.to(`conv_${conversationId}`).emit(event, data)
+  _io?.to(`conversation_${conversationId}`).emit(event, data)
 }
 
 /**
@@ -208,13 +241,18 @@ export function broadcastNewMessage(
   conversationId: string,
   message: Record<string, unknown>
 ): void {
-  // Conversation-level event for open chat windows
-  emitToConversation(conversationId, 'new_message', message)
-  // Tenant-level event to update inbox unread counts
+  const payload = { ...message, conversation_id: conversationId }
+
+  // Open chat window (conversation room)
+  emitToConversation(conversationId, 'new_message', payload)
+  // Tenant inbox (all agents on tenant) — Baileys runs in Next.js, clients listen here too
+  emitToTenant(tenantId, 'new_message', payload)
   emitToTenant(tenantId, 'inbox_update', {
     conversationId,
     preview: String(message.content ?? '').slice(0, 100),
-    timestamp: message.created_at,
+    timestamp: message.created_at ?? new Date().toISOString(),
+    sender_type: message.sender_type,
+    unread_delta: message.sender_type === 'user' ? 1 : 0,
   })
 }
 

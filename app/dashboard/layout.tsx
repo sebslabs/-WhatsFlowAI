@@ -7,6 +7,7 @@ import { TopBar } from "@/components/dashboard/TopBar";
 import { MobileSidebar } from "@/components/dashboard/MobileSidebar";
 import { Breadcrumbs } from "@/components/dashboard/Breadcrumbs";
 import { NotificationsProvider } from "@/context/NotificationsContext";
+import { WhatsAppNotificationListener } from "@/components/dashboard/WhatsAppNotificationListener";
 import { SidebarProvider, useSidebar } from "@/context/SidebarContext";
 import { ThemeProvider } from "@/components/theme-provider";
 import {
@@ -24,7 +25,7 @@ import { cn } from "@/lib/utils";
 const mobileNavItems = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { label: "Leads", href: "/dashboard/leads", icon: Users },
-  { label: "Chats", href: "/dashboard/conversations", icon: WhatsAppIcon },
+  { label: "Chats", href: "/dashboard/conversations", icon: MessageSquare },
   { label: "Automation", href: "/dashboard/automation", icon: Workflow },
   { label: "Campaigns", href: "/dashboard/campaigns", icon: Megaphone },
   { label: "Templates", href: "/dashboard/templates", icon: MessageSquare },
@@ -104,6 +105,7 @@ export default function DashboardLayout({
     >
       <SidebarProvider>
         <NotificationsProvider>
+          <WhatsAppNotificationListener />
           <DashboardShell>{children}</DashboardShell>
         </NotificationsProvider>
       </SidebarProvider>

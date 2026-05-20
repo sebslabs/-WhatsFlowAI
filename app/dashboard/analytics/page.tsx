@@ -194,7 +194,7 @@ export default function AnalyticsPage() {
               <Button
                 onClick={() => setSheetOpen(true)}
                 variant="outline"
-                className="border-[#22C55E] text-[#22C55E] hover:bg-[#22C55E]/10 h-10 px-4 font-bold rounded-xl transition-all"
+                className="border-[#22C55E] text-[#22C55E] hover:text-[#22C55E] dark:hover:text-[#22C55E] hover:bg-[#22C55E]/10 h-10 px-4 font-bold rounded-xl transition-all"
               >
                 <SlidersHorizontal className="w-4 h-4 mr-2" />
                 Customize Report

@@ -61,8 +61,8 @@ const adminDb = createClient(
 
 interface WaAccount {
   phone_number_id: string
-  access_token: string  // AES-256-GCM encrypted
-  waba_id: string | null
+  encrypted_access_token: string  // AES-256-GCM encrypted
+  business_account_id: string | null
 }
 
 const accountCache = new Map<string, { account: WaAccount; cachedAt: number }>()
@@ -73,10 +73,10 @@ async function getAccount(tenantId: string): Promise<WaAccount | null> {
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) return cached.account
 
   const { data, error } = await adminDb
-    .from('whatsapp_accounts')       // ← correct table name
-    .select('phone_number_id, access_token, waba_id')
+    .from('whatsapp_accounts')       
+    .select('phone_number_id, encrypted_access_token, business_account_id')
     .eq('tenant_id', tenantId)
-    .eq('status', 'connected')       // ← correct enum value
+    .eq('status', 'connected')       
     .limit(1)
     .maybeSingle()
 
@@ -169,7 +169,7 @@ export class WhatsAppService {
     const account = await getAccount(tenantId)
     if (!account) return { success: false, error: 'No active WhatsApp account for tenant' }
 
-    const plainToken = decrypt(account.access_token)
+    const plainToken = decrypt(account.encrypted_access_token)
     if (!plainToken) return { success: false, error: 'Failed to decrypt access token' }
 
     return callMetaAPI(account.phone_number_id, plainToken, {
@@ -193,7 +193,7 @@ export class WhatsAppService {
     const account = await getAccount(tenantId)
     if (!account) return { success: false, error: 'No active WhatsApp account' }
 
-    const plainToken = decrypt(account.access_token)
+    const plainToken = decrypt(account.encrypted_access_token)
     if (!plainToken) return { success: false, error: 'Failed to decrypt access token' }
 
     return callMetaAPI(account.phone_number_id, plainToken, {
@@ -223,7 +223,7 @@ export class WhatsAppService {
     const account = await getAccount(tenantId)
     if (!account) return { success: false, error: 'No active WhatsApp account' }
 
-    const plainToken = decrypt(account.access_token)
+    const plainToken = decrypt(account.encrypted_access_token)
     if (!plainToken) return { success: false, error: 'Failed to decrypt access token' }
 
     const mediaObj: Record<string, unknown> = { link: mediaUrl }
@@ -248,7 +248,7 @@ export class WhatsAppService {
     const account = await getAccount(tenantId)
     if (!account) return
 
-    const plainToken = decrypt(account.access_token)
+    const plainToken = decrypt(account.encrypted_access_token)
     if (!plainToken) return
 
     await callMetaAPI(account.phone_number_id, plainToken, {

@@ -125,14 +125,22 @@ services:
     image: ghcr.io/felixmosh/bull-board:latest
     container_name: whatsflow-bullboard
     restart: unless-stopped
-    ports:
-      - "3001:3000"
+    # MEDIUM FIX (#6): Bull Board is restricted to the internal Docker network ONLY.
+    # The public port mapping (3001:3000) has been REMOVED — it is not reachable
+    # from outside the Compose network. Access it via SSH tunnel or internal VPN:
+    #   ssh -L 3001:whatsflow-bullboard:3000 user@host
+    # Basic auth is enforced: BULL_BOARD_USER and BULL_BOARD_PASSWORD must be
+    # set in server/.env — Docker will refuse to start if they are absent.
+    networks:
+      - default
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      # Protect with basic auth in production!
-      # BULL_BOARD_USER: admin
-      # BULL_BOARD_PASSWORD: changeme
+      BULL_BOARD_USER: ${BULL_BOARD_USER:?BULL_BOARD_USER must be set in .env}
+      BULL_BOARD_PASSWORD: ${BULL_BOARD_PASSWORD:?BULL_BOARD_PASSWORD must be set in .env}
+    depends_on:
+      redis:
+        condition: service_healthy
 
 volumes:
   redis-data:

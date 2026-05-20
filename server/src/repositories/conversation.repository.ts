@@ -14,9 +14,10 @@ export class ConversationRepository {
    * The unique constraint is: (tenant_id, phone)
    */
   async findContactByPhone(tenantId: string, phone: string): Promise<Contact | null> {
+    // MEDIUM FIX (#5): Explicit column list — avoids over-fetching unused contact columns.
     const { data, error } = await this.db
       .from('contacts')
-      .select('*')
+      .select('id, tenant_id, phone, name, created_at, updated_at')
       .eq('tenant_id', tenantId)
       .eq('phone', phone)
       .maybeSingle()
@@ -46,9 +47,10 @@ export class ConversationRepository {
    * Find conversation for a contact (1 contact → 1 conversation per tenant, enforced by unique constraint).
    */
   async findByContact(tenantId: string, contactId: string): Promise<Conversation | null> {
+    // MEDIUM FIX (#5): Explicit column list — avoids over-fetching unused conversation columns.
     const { data, error } = await this.db
       .from('conversations')
-      .select('*')
+      .select('id, tenant_id, contact_id, status, mode, last_message_at, unread_count, created_at, updated_at')
       .eq('tenant_id', tenantId)
       .eq('contact_id', contactId)
       .maybeSingle()

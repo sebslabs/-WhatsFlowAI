@@ -20,6 +20,7 @@ import { ImportCatalogModal } from "@/components/dashboard/catalog/ImportCatalog
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api-config";
+import { createClient } from "@/lib/supabase/client";
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface Product {
@@ -122,19 +123,44 @@ function ImageUploader({
 
     setUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64Url = reader.result as string;
-        onChange([...values, base64Url]);
-        toast("Image uploaded successfully ✓", "success");
-        setUploading(false);
-      };
-      reader.onerror = () => {
-        throw new Error("Failed to read file");
-      };
-      reader.readAsDataURL(file);
+      const supabase = createClient();
+      
+      // 1. Get logged in user session details
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error("No active credentials or session found. Please log in.");
+      }
+
+      // Retrieve tenant_id from members mapping
+      const { data: memberData } = await supabase
+        .from('tenant_members')
+        .select('tenant_id')
+        .eq('profile_id', user.id)
+        .limit(1)
+        .single();
+
+      const tenantId = memberData?.tenant_id ?? 'global';
+
+      // 2. Upload file to 'knowledge-base' bucket under 'catalog/' namespace
+      const fileKey = `catalog/${tenantId}/${Date.now()}-${file.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('knowledge-base')
+        .upload(fileKey, file, { contentType: file.type, cacheControl: '3600' });
+
+      if (uploadError) {
+        throw new Error(`Cloud upload failed: ${uploadError.message}`);
+      }
+
+      // 3. Get the CDN public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('knowledge-base')
+        .getPublicUrl(fileKey);
+
+      onChange([...values, publicUrl]);
+      toast("Catalog image uploaded to cloud storage! ✓", "success");
     } catch (err: any) {
       toast(err.message || "Upload failed", "error");
+    } finally {
       setUploading(false);
     }
   }

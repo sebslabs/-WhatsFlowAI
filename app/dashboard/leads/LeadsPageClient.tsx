@@ -123,7 +123,7 @@ function LeadCard({
             className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-black shrink-0 !bg-[#22C55E]"
             style={{ backgroundColor: "#22C55E" }}
           >
-            {lead.name.charAt(0).toUpperCase()}
+            {(lead.name || "?").charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
             <p className="text-sm font-bold text-[#111827] dark:text-[#F9FAFB] truncate leading-tight">{lead.name}</p>
@@ -492,7 +492,7 @@ export default function LeadsPageClient() {
   async function handleDrop(e: React.DragEvent, targetStage: any) {
     e.preventDefault();
     const leadId = e.dataTransfer.getData("leadId");
-    if (leadId && draggingLead?.stage !== targetStage) {
+    if (leadId && draggingLead?.stage?.toLowerCase() !== targetStage.toLowerCase()) {
       try {
         await moveLeadToStage(leadId, targetStage);
         toast(`Moved to ${targetStage}`, "success");
@@ -510,10 +510,10 @@ export default function LeadsPageClient() {
     ? leads.filter(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()) || l.phone.includes(searchQuery) || l.service.toLowerCase().includes(searchQuery.toLowerCase()))
     : leads;
 
-  const leadsPerStage = (stage: any) => boardLeads.filter(l => l.stage === stage);
+  const leadsPerStage = (stage: any) => boardLeads.filter(l => l.stage?.toLowerCase() === stage.toLowerCase());
 
   const totalValue = leads.length;
-  const wonCount = leads.filter(l => l.stage === "Booked").length;
+  const wonCount = leads.filter(l => l.stage?.toLowerCase() === "booked").length;
   const convRate = totalValue > 0 ? Math.round((wonCount / totalValue) * 100) : 0;
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -573,7 +573,7 @@ export default function LeadsPageClient() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: "Total Leads", value: leads.length, color: "#3B82F6", bg: "#EFF6FF" },
-          { label: "In Progress", value: leads.filter(l => !["Booked","Lost"].includes(l.stage)).length, color: "#F59E0B", bg: "#FFFBEB" },
+          { label: "In Progress", value: leads.filter(l => !["booked","lost"].includes(l.stage?.toLowerCase())).length, color: "#F59E0B", bg: "#FFFBEB" },
           { label: "Booked", value: wonCount, color: "#22C55E", bg: "#F0FDF4" },
           { label: "Conversion", value: `${convRate}%`, color: "#8B5CF6", bg: "#F5F3FF" },
         ].map(s => (

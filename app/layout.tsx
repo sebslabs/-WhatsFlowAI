@@ -31,6 +31,7 @@ export const metadata: Metadata = {
 };
 
 import { ThemeReset } from "@/components/ThemeReset";
+import { EndorselyTracker } from "@/components/EndorselyTracker";
 
 export default function RootLayout({
   children,
@@ -39,8 +40,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${plusJakartaSans.className} antialiased`}>
+      <body className={`${plusJakartaSans.className} antialiased`} suppressHydrationWarning>
         <ThemeReset />
+        <EndorselyTracker />
         {children}
         <Toaster />
       </body>

@@ -1,5 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import {
+  rateLimitAi,
+  rateLimitWebhook,
+  rateLimitApi,
+  rateLimitExceededResponse,
+} from '@/lib/rate-limit'
 
 // Routes that require the 'admin' role
 const ADMIN_ONLY_ROUTES = [
@@ -24,11 +30,21 @@ const PUBLIC_ROUTES = [
   '/careers',
   '/privacy',
   '/terms',
+  '/terms-and-conditions',
+  '/refund',
+  '/refund-policy',
   '/status',
+  '/api/diagnostic',
 ]
 
 // Webhook routes bypass auth entirely (they use HMAC signature verification instead)
 const WEBHOOK_ROUTES = ['/api/webhooks']
+
+// SECURITY FIX (CRITICAL #2): Internal routes bypass session auth but are
+// protected by a mandatory x-internal-key header validated here at the edge.
+// This prevents the middleware from redirecting internal machine-to-machine
+// calls to /auth/login while still enforcing strict secret verification.
+const INTERNAL_ROUTES = ['/api/internal']
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_ROUTES.some(
@@ -44,73 +60,72 @@ function isAdminOnly(pathname: string): boolean {
   return ADMIN_ONLY_ROUTES.some((route) => pathname.startsWith(route))
 }
 
+// SECURITY FIX (CRITICAL #2): Validate the internal shared secret at the edge.
+// Returns true only if the header matches the configured INTERNAL_API_KEY.
+function isInternal(pathname: string): boolean {
+  return INTERNAL_ROUTES.some((route) => pathname.startsWith(route))
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Static assets and webhooks skip all auth middleware
-  if (isWebhook(pathname)) return NextResponse.next()
+  // 1. Zero-Trust Header Purification: Strip client-supplied context headers to prevent request smuggling
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.delete('x-user-id')
+  requestHeaders.delete('x-tenant-id')
+  requestHeaders.delete('x-user-role')
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  // Webhook routes skip auth but must undergo security rate-limiting protection
+  if (isWebhook(pathname)) {
+    const rate = await rateLimitWebhook(request)
+    if (!rate.success) return rateLimitExceededResponse(rate)
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      }
+    })
+  }
 
-  // Gracefully handle missing configuration without crashing the entire app
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('[Middleware] Warning: Missing Supabase environment variables.')
-    
-    // If hitting a public landing page, allow it to load
-    if (isPublic(pathname)) {
-      return NextResponse.next()
-    }
+  // SECURITY FIX (CRITICAL #2): Internal route — validate x-internal-key at edge.
+  // Machine-to-machine calls use a shared secret instead of user JWT sessions.
+  if (isInternal(pathname)) {
+    const internalKey = request.headers.get('x-internal-key')
+    const systemInternalKey = process.env.INTERNAL_API_KEY
 
-    const isApiRoute = pathname.startsWith('/api/')
-    if (isApiRoute) {
-      return new NextResponse(
-        JSON.stringify({
-          error: 'Configuration Error',
-          message: 'Missing Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY). Please add them to your project environment variables.',
-        }),
-        { status: 500, headers: { 'content-type': 'application/json' } }
+    // If the INTERNAL_API_KEY env var is not configured, block all internal calls
+    if (!systemInternalKey) {
+      return NextResponse.json(
+        { error: 'Internal service misconfigured', code: 'INTERNAL_KEY_MISSING' },
+        { status: 500 }
       )
     }
 
-    return new NextResponse(
-      `<!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Configuration Required | WhatsFlow AI</title>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f9fafb; color: #1f2937; }
-          .container { max-width: 500px; padding: 2.5rem; background: #ffffff; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.05); border: 1px solid #f3f4f6; }
-          h2 { color: #ef4444; margin-top: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.025em; }
-          p { font-size: 0.95rem; color: #4b5563; line-height: 1.6; }
-          .code-box { background: #f3f4f6; padding: 1rem; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.85rem; color: #111827; margin: 1.5rem 0; border: 1px solid #e5e7eb; line-height: 1.8; font-weight: 500; text-align: left; }
-          .footer { font-size: 0.85rem; color: #9ca3af; margin-top: 1.5rem; text-align: center; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h2>Missing Configuration</h2>
-          <p>The application has successfully deployed, but it is currently missing the required Supabase credentials in the environment settings.</p>
-          <div class="code-box">
-            • NEXT_PUBLIC_SUPABASE_URL<br/>
-            • NEXT_PUBLIC_SUPABASE_ANON_KEY
-          </div>
-          <p>Please add these variables to your <strong>Vercel Project Settings &gt; Environment Variables</strong> and trigger a fresh redeployment.</p>
-          <div class="footer">WhatsFlow AI • Infrastructure Safety Guard</div>
-        </div>
-      </body>
-      </html>`,
-      { status: 500, headers: { 'content-type': 'text/html' } }
-    )
+    // Reject requests with a missing or incorrect internal key
+    if (!internalKey || internalKey !== systemInternalKey) {
+      return NextResponse.json(
+        { error: 'Unauthorized', code: 'INVALID_INTERNAL_KEY' },
+        { status: 401 }
+      )
+    }
+
+    // Apply rate limiting even to authenticated internal routes
+    const rate = await rateLimitApi(request)
+    if (!rate.success) return rateLimitExceededResponse(rate)
+
+    return NextResponse.next({
+      request: { headers: requestHeaders },
+    })
   }
 
-  let response = NextResponse.next({ request })
+  let response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    }
+  })
 
   const supabase = createServerClient(
-    supabaseUrl,
-    supabaseAnonKey,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         get(name: string) {
@@ -118,12 +133,20 @@ export async function middleware(request: NextRequest) {
         },
         set(name: string, value: string, options: CookieOptions) {
           request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({ request })
+          response = NextResponse.next({
+            request: {
+              headers: requestHeaders,
+            }
+          })
           response.cookies.set({ name, value, ...options })
         },
         remove(name: string, options: CookieOptions) {
           request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({ request })
+          response = NextResponse.next({
+            request: {
+              headers: requestHeaders,
+            }
+          })
           response.cookies.set({ name, value: '', ...options })
         },
       },
@@ -131,13 +154,18 @@ export async function middleware(request: NextRequest) {
   )
 
   // Always call getUser() — never getSession() — to validate the JWT server-side.
-  // getSession() reads from the cookie without network verification and can be spoofed.
   const { data: { user } } = await supabase.auth.getUser()
 
   const isProtected = pathname.startsWith('/dashboard') || pathname.startsWith('/api/')
 
-  // Unauthenticated user hitting a protected route → redirect to login
+  // Unauthenticated user hitting a protected route
   if (!user && isProtected && !isPublic(pathname)) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Missing valid JWT authentication token.', code: 'UNAUTHORIZED' },
+        { status: 401 }
+      )
+    }
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/auth/login'
     loginUrl.searchParams.set('redirect', pathname)
@@ -160,16 +188,88 @@ export async function middleware(request: NextRequest) {
       .single()
 
     if (profile?.role !== 'admin') {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'Forbidden. Requester lacks the admin role.', code: 'FORBIDDEN' },
+          { status: 403 }
+        )
+      }
       const forbiddenUrl = request.nextUrl.clone()
       forbiddenUrl.pathname = '/dashboard'
       return NextResponse.redirect(forbiddenUrl)
     }
   }
 
-  // Propagate user id in a read-only header so API routes can trust it
-  // without re-querying the DB. Never trust x-user-id from client requests.
+  // SECURITY FIX (HIGH #5): Align tenant_id resolution with requireAuthApi in lib/auth.ts.
+  // Previously used profiles.organization_id which could diverge from the canonical
+  // tenant_members.tenant_id — creating a split-brain tenant context between middleware
+  // headers and downstream API guards. Now uses the same tenant_members lookup.
   if (user) {
+    const { data: member } = await supabase
+      .from('tenant_members')
+      .select('role, tenant_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle()
+
+    const tenantId = member?.tenant_id ?? 'system'
+    const userRole = member?.role ?? 'viewer'
+
     response.headers.set('x-user-id', user.id)
+    response.headers.set('x-tenant-id', tenantId)
+    response.headers.set('x-user-role', userRole)
+
+    requestHeaders.set('x-user-id', user.id)
+    requestHeaders.set('x-tenant-id', tenantId)
+    requestHeaders.set('x-user-role', userRole)
+
+    // SaaS Subscription Edge-Enforcement Middleware Check
+    if (tenantId !== 'system') {
+      const { data: sub } = await supabase
+        .from('billing_subscriptions')
+        .select('subscription_status, ai_conversation_used, ai_conversation_limit')
+        .eq('tenant_id', tenantId)
+        .maybeSingle()
+
+      if (sub) {
+        const status = sub.subscription_status
+        const isExpiredOrSuspended = ['expired', 'suspended'].includes(status)
+        const isLimitReached = status === 'limit_reached' || ((sub.ai_conversation_used || 0) >= (sub.ai_conversation_limit || 1500))
+
+        // Redirect blocked users to settings/billing page unless accessing billing or settings
+        const isBillingRoute = pathname.startsWith('/dashboard/settings') || 
+                               pathname.startsWith('/api/settings') || 
+                               pathname.startsWith('/api/webhooks')
+
+        if (isExpiredOrSuspended && pathname.startsWith('/dashboard') && !isBillingRoute) {
+          const billingUrl = request.nextUrl.clone()
+          billingUrl.pathname = '/dashboard/settings'
+          billingUrl.searchParams.set('tab', 'billing')
+          billingUrl.searchParams.set('alert', 'expired')
+          return NextResponse.redirect(billingUrl)
+        }
+
+        // Block AI requests at edge if expired or limit reached
+        const isAiRoute = pathname.startsWith('/api/ai-agents') || pathname.startsWith('/api/ai-settings')
+        if ((isExpiredOrSuspended || isLimitReached) && isAiRoute) {
+          return NextResponse.json(
+            { error: 'Subscription limits exceeded or trial expired. Please visit Settings -> Billing to upgrade.', code: 'SUBSCRIPTION_RESTRICTED' },
+            { status: 403 }
+          )
+        }
+      }
+    }
+  }
+
+  // Apply enterprise sliding-window rate limiting on all Next.js API boundaries
+  if (pathname.startsWith('/api/')) {
+    if (pathname.includes('/ai')) {
+      const rate = await rateLimitAi(request)
+      if (!rate.success) return rateLimitExceededResponse(rate)
+    } else {
+      const rate = await rateLimitApi(request)
+      if (!rate.success) return rateLimitExceededResponse(rate)
+    }
   }
 
   return response

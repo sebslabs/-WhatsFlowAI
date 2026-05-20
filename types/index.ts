@@ -20,7 +20,8 @@ export type NotificationType =
   | "attention"
   | "ai_paused"
   | "summary"
-  | "system";
+  | "system"
+  | "whatsapp_message";
 
 export interface Lead {
   id: string;

@@ -49,9 +49,11 @@ export class MessageRepository {
 
   /** Fetch messages for a conversation, ordered chronologically. */
   async findByConversation(conversationId: string, limit = 50): Promise<Message[]> {
+    // MEDIUM FIX (#5): Explicit column list — only fetch columns the Message type and
+    // consumers actually use. Excludes any future heavy JSONB metadata columns.
     const { data, error } = await this.db
       .from('messages')
-      .select('*')
+      .select('id, tenant_id, conversation_id, sender_type, content, message_type, media_url, wa_message_id, delivery_status, created_at')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
       .limit(limit)

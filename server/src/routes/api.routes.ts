@@ -37,6 +37,7 @@ const router = Router()
 router.use(apiLoggingMiddleware)
 
 router.get('/whatsapp/verify', WhatsAppController.verify)
+router.get('/whatsapp/webhook', WhatsAppController.verify) // Support Meta callback URL handshake GET
 router.post('/whatsapp/webhook', WhatsAppController.webhook)
 router.post('/chatbot/public', APIController.chatPublicBot)
 

@@ -11,7 +11,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { requireAuthApi } from '@/lib/auth'
 import { hasPermission, PermissionDeniedError } from '@/lib/rbac'
 import { rateLimitApi, rateLimitExceededResponse } from '@/lib/rate-limit'
@@ -30,30 +29,30 @@ export async function GET(request: NextRequest) {
   const rl = await rateLimitApi(request)
   if (!rl.success) return rateLimitExceededResponse(rl)
 
-  const { user, error } = await requireAuthApi(request)
+  const { user, supabase, error } = await requireAuthApi(request)
   if (error) return error
 
   if (!hasPermission(user.role, 'leads:read')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return NextResponse.json({ error: 'Forbidden', userRole: user.role }, { status: 403 })
   }
 
   try {
-    const supabase = createClient()
 
     // RLS on the `leads` table automatically filters by organization_id.
     // No need to manually .eq('organization_id', user.organizationId) — RLS does it.
     const { data, error: dbError } = await supabase
       .from('leads')
       .select('id, name, phone, email, service, stage, urgency, notes, created_at, updated_at')
+      .eq('tenant_id', user.tenant_id)
       .order('created_at', { ascending: false })
 
     if (dbError) throw dbError
 
     logger.info({ userId: user.id, count: data?.length }, 'Leads fetched')
     return NextResponse.json(data ?? [])
-  } catch (err) {
+  } catch (err: any) {
     logger.error({ userId: user.id }, 'GET /api/leads failed', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error', details: err?.message || String(err), raw: err }, { status: 500 })
   }
 }
 
@@ -63,7 +62,7 @@ export async function POST(request: NextRequest) {
   const rl = await rateLimitApi(request)
   if (!rl.success) return rateLimitExceededResponse(rl)
 
-  const { user, error } = await requireAuthApi(request)
+  const { user, supabase, error } = await requireAuthApi(request)
   if (error) return error
 
   if (!hasPermission(user.role, 'leads:create')) {
@@ -80,13 +79,11 @@ export async function POST(request: NextRequest) {
   try {
     const validated = createLeadSchema.parse(body)
 
-    const supabase = createClient()
     const { data, error: dbError } = await supabase
       .from('leads')
       .insert({
         ...validated,
-        // organization_id is set by the DB trigger (from auth.uid() → profiles)
-        // so we do NOT accept it from the client.
+        tenant_id: user.tenant_id,
       })
       .select('id, name, phone, email, service, stage, urgency, notes, created_at')
       .single()
@@ -104,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     logger.info({ userId: user.id, leadId: data.id }, 'Lead created')
     return NextResponse.json(data, { status: 201 })
-  } catch (err) {
+  } catch (err: any) {
     if (err instanceof ZodError) {
       return NextResponse.json(
         { error: 'Validation failed', details: err.flatten().fieldErrors },
@@ -112,7 +109,7 @@ export async function POST(request: NextRequest) {
       )
     }
     logger.error({ userId: user.id }, 'POST /api/leads failed', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error', details: err?.message || String(err), raw: err }, { status: 500 })
   }
 }
 
@@ -122,7 +119,7 @@ export async function PATCH(request: NextRequest) {
   const rl = await rateLimitApi(request)
   if (!rl.success) return rateLimitExceededResponse(rl)
 
-  const { user, error } = await requireAuthApi(request)
+  const { user, supabase, error } = await requireAuthApi(request)
   if (error) return error
 
   if (!hasPermission(user.role, 'leads:update')) {
@@ -139,11 +136,11 @@ export async function PATCH(request: NextRequest) {
   try {
     const { id, ...fields } = updateLeadSchema.parse(body)
 
-    const supabase = createClient()
     const { data, error: dbError } = await supabase
       .from('leads')
       .update({ ...fields, updated_at: new Date().toISOString() })
       .eq('id', id)
+      .eq('tenant_id', user.tenant_id)
       // RLS ensures this update only touches rows owned by the user's org
       .select('id, name, phone, email, service, stage, urgency, notes, updated_at')
       .single()
@@ -156,7 +153,7 @@ export async function PATCH(request: NextRequest) {
 
     logger.info({ userId: user.id, leadId: id }, 'Lead updated')
     return NextResponse.json(data)
-  } catch (err) {
+  } catch (err: any) {
     if (err instanceof ZodError) {
       return NextResponse.json(
         { error: 'Validation failed', details: err.flatten().fieldErrors },
@@ -176,7 +173,7 @@ export async function DELETE(request: NextRequest) {
   const rl = await rateLimitApi(request)
   if (!rl.success) return rateLimitExceededResponse(rl)
 
-  const { user, error } = await requireAuthApi(request)
+  const { user, supabase, error } = await requireAuthApi(request)
   if (error) return error
 
   const singleId = request.nextUrl.searchParams.get('id')
@@ -189,14 +186,17 @@ export async function DELETE(request: NextRequest) {
     try {
       const { id } = deleteLeadSchema.parse({ id: singleId })
 
-      const supabase = createClient()
-      const { error: dbError } = await supabase.from('leads').delete().eq('id', id)
+      const { error: dbError } = await supabase
+        .from('leads')
+        .delete()
+        .eq('id', id)
+        .eq('tenant_id', user.tenant_id)
 
       if (dbError) throw dbError
 
       logger.info({ userId: user.id, leadId: id }, 'Lead deleted')
       return NextResponse.json({ deleted: 1 })
-    } catch (err) {
+    } catch (err: any) {
       if (err instanceof ZodError) {
         return NextResponse.json(
           { error: 'Validation failed', details: err.flatten().fieldErrors },
@@ -222,18 +222,18 @@ export async function DELETE(request: NextRequest) {
   try {
     const { ids } = bulkDeleteLeadsSchema.parse(body)
 
-    const supabase = createClient()
     const { error: dbError } = await supabase
       .from('leads')
       .delete()
       .in('id', ids)
-      // RLS prevents cross-tenant deletes automatically
+      .eq('tenant_id', user.tenant_id)
+    // RLS prevents cross-tenant deletes automatically
 
     if (dbError) throw dbError
 
     logger.info({ userId: user.id, count: ids.length }, 'Leads bulk-deleted')
     return NextResponse.json({ deleted: ids.length })
-  } catch (err) {
+  } catch (err: any) {
     if (err instanceof ZodError) {
       return NextResponse.json(
         { error: 'Validation failed', details: err.flatten().fieldErrors },
