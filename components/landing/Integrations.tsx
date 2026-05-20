@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import { SectionHeaderBlock } from "./SectionHeaderBlock";
-import { 
+import {
   Plus,
   ArrowRight
 } from "lucide-react";
@@ -26,38 +26,35 @@ const IntegrationNode = ({ name, iconUrl, color, side, index, isHovered, onHover
       viewport={{ once: true }}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
-      animate={{ 
+      animate={{
         y: [0, -4, 0],
         scale: isHovered ? 1.05 : 1
       }}
-      transition={{ 
+      transition={{
         y: { duration: 4, repeat: Infinity, ease: "easeInOut", delay: index * 0.2 },
         scale: { duration: 0.2 }
       }}
-      className={`flex items-center gap-4 lg:gap-6 group cursor-pointer ${
-        side === "right" ? "lg:flex-row-reverse lg:text-right" : ""
-      } flex-row text-left bg-white/50 backdrop-blur-sm sm:bg-transparent p-3 sm:p-0 rounded-2xl border border-gray-100 sm:border-transparent`}
+      className={`flex items-center gap-4 lg:gap-6 group cursor-pointer ${side === "right" ? "lg:flex-row-reverse lg:text-right" : ""
+        } flex-row text-left bg-white/50 backdrop-blur-sm sm:bg-transparent p-3 sm:p-0 rounded-2xl border border-gray-100 sm:border-transparent`}
     >
-      <div 
-        className={`w-11 h-11 lg:w-14 lg:h-14 rounded-xl lg:rounded-2xl flex items-center justify-center bg-white shadow-lg lg:shadow-2xl border transition-all duration-500 overflow-hidden p-2 lg:p-3 relative z-10 ${
-          isHovered ? "border-[#22c55e] scale-110" : "border-gray-100"
-        }`}
-        style={{ 
-          boxShadow: isHovered 
-            ? `0 20px 40px -10px ${color}60, 0 0 20px ${color}20` 
+      <div
+        className={`w-11 h-11 lg:w-14 lg:h-14 rounded-xl lg:rounded-2xl flex items-center justify-center bg-white shadow-lg lg:shadow-2xl border transition-all duration-500 overflow-hidden p-2 lg:p-3 relative z-10 ${isHovered ? "border-[#22c55e] scale-110" : "border-gray-100"
+          }`}
+        style={{
+          boxShadow: isHovered
+            ? `0 20px 40px -10px ${color}60, 0 0 20px ${color}20`
             : `0 10px 25px -5px ${color}20`
         }}
       >
         <img src={iconUrl} alt={name} className="w-full h-full object-contain relative z-10" />
-        <div 
-          className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-500" 
+        <div
+          className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-500"
           style={{ backgroundColor: color }}
         />
       </div>
       <div className="flex flex-col">
-        <h4 className={`font-bold text-base lg:text-lg leading-none mb-1 lg:mb-1.5 transition-colors duration-300 ${
-          isHovered ? "text-[#16A34A]" : "text-[#0f172a]"
-        }`}>{name}</h4>
+        <h4 className={`font-bold text-base lg:text-lg leading-none mb-1 lg:mb-1.5 transition-colors duration-300 ${isHovered ? "text-[#16A34A]" : "text-[#0f172a]"
+          }`}>{name}</h4>
         <div className={`h-1 w-0 bg-[#16A34A] rounded-full transition-all duration-300 ${isHovered ? "w-full" : "w-0"}`} />
         <p className="text-[10px] lg:text-[11px] text-gray-400 font-black uppercase tracking-widest mt-1">Ready for Flow</p>
       </div>
@@ -70,6 +67,11 @@ export function Integrations() {
   const containerRef = useRef(null);
   const isInView = useInView(containerRef, { once: true, margin: "-100px" });
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const leftIntegrations = [
     { name: "Salesforce", iconUrl: "https://img.icons8.com/color/96/salesforce.png", color: "#00A1E0" },
@@ -88,8 +90,8 @@ export function Integrations() {
   return (
     <section className="py-12 lg:py-20 bg-white relative overflow-hidden" ref={containerRef}>
       {/* Background Decor */}
-      <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none" 
-           style={{ backgroundImage: "radial-gradient(#16A34A 1px, transparent 1px)", backgroundSize: "30px 30px" }} />
+      <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none"
+        style={{ backgroundImage: "radial-gradient(#16A34A 1px, transparent 1px)", backgroundSize: "30px 30px" }} />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] bg-gradient-to-tr from-green-50/40 to-blue-50/40 rounded-full blur-[100px] -z-10" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -106,99 +108,101 @@ export function Integrations() {
 
         <div className="relative flex flex-col lg:flex-row items-center justify-center min-h-[300px] lg:min-h-[550px] gap-8 lg:gap-0">
           {/* SVG Connector Lines - Only visible on desktop */}
-          <svg className="hidden lg:block absolute inset-0 w-full h-full pointer-events-none z-0" viewBox="0 0 1000 550">
-            <defs>
-              <filter id="glow-heavy">
-                <feGaussianBlur stdDeviation="3" result="blur"/>
-                <feComposite in="SourceGraphic" in2="blur" operator="over"/>
-              </filter>
-            </defs>
-            
-            {/* Left Lines */}
-            {leftIntegrations.map((item, i) => {
-              const yStart = 65 + i * 140;
-              const path = `M 230 ${yStart} C 380 ${yStart}, 420 275, 500 275`;
-              const active = hoveredNode === item.name;
-              return (
-                <g key={`left-line-${i}`}>
-                  <motion.path
-                    d={path}
-                    stroke={active ? item.color : "#E2EDE2"}
-                    strokeWidth={active ? "3" : "1.5"}
-                    fill="transparent"
-                    initial={{ pathLength: 0, opacity: 0.1 }}
-                    animate={isInView ? { 
-                      pathLength: 1, 
-                      opacity: active ? 1 : 0.3,
-                      stroke: active ? item.color : "#E2EDE2"
-                    } : {}}
-                    transition={{ duration: 1.2, delay: i * 0.1 }}
-                  />
-                  {/* Data Flow Pulse */}
-                  <motion.circle
-                    r={active ? "3.5" : "1.8"}
-                    fill={active ? item.color : "#16A34A"}
-                    initial={{ offsetDistance: "0%", opacity: 0 }}
-                    animate={{ 
-                      offsetDistance: "100%", 
-                      opacity: active ? [0, 1, 0] : [0, 0.4, 0] 
-                    }}
-                    transition={{ 
-                      duration: active ? 1.5 : 4, 
-                      repeat: Infinity, 
-                      delay: i * 0.5, 
-                      ease: "linear" 
-                    }}
-                    style={{ offsetPath: `path("${path}")`, filter: active ? "url(#glow-heavy)" : "none" }}
-                  />
-                </g>
-              );
-            })}
+          {mounted && (
+            <svg className="hidden lg:block absolute inset-0 w-full h-full pointer-events-none z-0" viewBox="0 0 1000 550">
+              <defs>
+                <filter id="glow-heavy">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
 
-            {/* Right Lines */}
-            {rightIntegrations.map((item, i) => {
-              const yStart = 65 + i * 140;
-              const path = `M 770 ${yStart} C 620 ${yStart}, 580 275, 500 275`;
-              const active = hoveredNode === item.name;
-              return (
-                <g key={`right-line-${i}`}>
-                   <motion.path
-                    d={path}
-                    stroke={active ? item.color : "#E2EDE2"}
-                    strokeWidth={active ? "3" : "1.5"}
-                    fill="transparent"
-                    initial={{ pathLength: 0, opacity: 0.1 }}
-                    animate={isInView ? { 
-                      pathLength: 1, 
-                      opacity: active ? 1 : 0.3,
-                      stroke: active ? item.color : "#E2EDE2"
-                    } : {}}
-                    transition={{ duration: 1.2, delay: i * 0.1 }}
-                  />
-                  <motion.circle
-                    r={active ? "3.5" : "1.8"}
-                    fill={active ? item.color : "#16A34A"}
-                    initial={{ offsetDistance: "0%", opacity: 0 }}
-                    animate={{ 
-                      offsetDistance: "100%", 
-                      opacity: active ? [0, 1, 0] : [0, 0.4, 0] 
-                    }}
-                    transition={{ 
-                      duration: active ? 1.5 : 4, 
-                      repeat: Infinity, 
-                      delay: i * 0.5, 
-                      ease: "linear" 
-                    }}
-                    style={{ offsetPath: `path("${path}")`, filter: active ? "url(#glow-heavy)" : "none" }}
-                  />
-                </g>
-              );
-            })}
-          </svg>
+              {/* Left Lines */}
+              {leftIntegrations.map((item, i) => {
+                const yStart = 65 + i * 140;
+                const path = `M 230 ${yStart} C 380 ${yStart}, 420 275, 500 275`;
+                const active = hoveredNode === item.name;
+                return (
+                  <g key={`left-line-${i}`}>
+                    <motion.path
+                      d={path}
+                      stroke={active ? item.color : "#E2EDE2"}
+                      strokeWidth={active ? "3" : "1.5"}
+                      fill="transparent"
+                      initial={{ pathLength: 0, opacity: 0.1 }}
+                      animate={isInView ? {
+                        pathLength: 1,
+                        opacity: active ? 1 : 0.3,
+                        stroke: active ? item.color : "#E2EDE2"
+                      } : {}}
+                      transition={{ duration: 1.2, delay: i * 0.1 }}
+                    />
+                    {/* Data Flow Pulse */}
+                    <motion.circle
+                      r={active ? "3.5" : "1.8"}
+                      fill={active ? item.color : "#16A34A"}
+                      initial={{ offsetDistance: "0%", opacity: 0 }}
+                      animate={{
+                        offsetDistance: "100%",
+                        opacity: active ? [0, 1, 0] : [0, 0.4, 0]
+                      }}
+                      transition={{
+                        duration: active ? 1.5 : 4,
+                        repeat: Infinity,
+                        delay: i * 0.5,
+                        ease: "linear"
+                      }}
+                      style={{ offsetPath: `path("${path}")`, filter: active ? "url(#glow-heavy)" : "none" }}
+                    />
+                  </g>
+                );
+              })}
+
+              {/* Right Lines */}
+              {rightIntegrations.map((item, i) => {
+                const yStart = 65 + i * 140;
+                const path = `M 770 ${yStart} C 620 ${yStart}, 580 275, 500 275`;
+                const active = hoveredNode === item.name;
+                return (
+                  <g key={`right-line-${i}`}>
+                    <motion.path
+                      d={path}
+                      stroke={active ? item.color : "#E2EDE2"}
+                      strokeWidth={active ? "3" : "1.5"}
+                      fill="transparent"
+                      initial={{ pathLength: 0, opacity: 0.1 }}
+                      animate={isInView ? {
+                        pathLength: 1,
+                        opacity: active ? 1 : 0.3,
+                        stroke: active ? item.color : "#E2EDE2"
+                      } : {}}
+                      transition={{ duration: 1.2, delay: i * 0.1 }}
+                    />
+                    <motion.circle
+                      r={active ? "3.5" : "1.8"}
+                      fill={active ? item.color : "#16A34A"}
+                      initial={{ offsetDistance: "0%", opacity: 0 }}
+                      animate={{
+                        offsetDistance: "100%",
+                        opacity: active ? [0, 1, 0] : [0, 0.4, 0]
+                      }}
+                      transition={{
+                        duration: active ? 1.5 : 4,
+                        repeat: Infinity,
+                        delay: i * 0.5,
+                        ease: "linear"
+                      }}
+                      style={{ offsetPath: `path("${path}")`, filter: active ? "url(#glow-heavy)" : "none" }}
+                    />
+                  </g>
+                );
+              })}
+            </svg>
+          )}
 
           {/* Central Hub Core */}
           <div className="relative z-20 isolate order-1 lg:order-none">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0, opacity: 0 }}
               animate={isInView ? { scale: 1, opacity: 1 } : {}}
               transition={{ type: "spring", damping: 15, delay: 0.3 }}
@@ -210,10 +214,10 @@ export function Integrations() {
 
               {/* Advanced Orbits */}
               {[1, 2, 3].map((orbit) => (
-                <div 
+                <div
                   key={orbit}
                   className={`absolute pointer-events-none orbit-${orbit}`}
-                  style={{ 
+                  style={{
                     border: `1px dashed ${orbit === 1 ? 'rgba(22,163,74,0.3)' : 'rgba(22,163,74,0.1)'}`,
                     borderRadius: '45%',
                     animation: `spin ${10 + orbit * 5}s linear infinite${orbit === 2 ? ' reverse' : ''}`
@@ -228,11 +232,11 @@ export function Integrations() {
             {/* Left/Top Side Integrations */}
             <div className="lg:absolute lg:left-0 lg:top-0 lg:bottom-0 flex flex-col justify-between lg:py-6 z-10 lg:w-64 gap-4 sm:gap-6 lg:gap-0">
               {leftIntegrations.map((item, i) => (
-                <IntegrationNode 
-                  key={item.name} 
-                  {...item} 
-                  side="left" 
-                  index={i} 
+                <IntegrationNode
+                  key={item.name}
+                  {...item}
+                  side="left"
+                  index={i}
                   isHovered={hoveredNode === item.name}
                   onHover={(h) => setHoveredNode(h ? item.name : null)}
                 />
@@ -242,11 +246,11 @@ export function Integrations() {
             {/* Right/Bottom Side Integrations */}
             <div className="lg:absolute lg:right-0 lg:top-0 lg:bottom-0 flex flex-col justify-between lg:py-6 z-10 lg:w-64 gap-4 sm:gap-6 lg:gap-0">
               {rightIntegrations.map((item, i) => (
-                <IntegrationNode 
-                  key={item.name} 
-                  {...item} 
-                  side="right" 
-                  index={i + 4} 
+                <IntegrationNode
+                  key={item.name}
+                  {...item}
+                  side="right"
+                  index={i + 4}
                   isHovered={hoveredNode === item.name}
                   onHover={(h) => setHoveredNode(h ? item.name : null)}
                 />

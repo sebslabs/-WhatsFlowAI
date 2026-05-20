@@ -15,23 +15,35 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { mockChartData, mockPieData, mockBarData } from "@/lib/mock-data";
 
-export function LeadConversionsChart() {
-  const data = mockChartData.slice(-14);
+interface ChartDataPoint {
+  date?: string;
+  day?: string;
+  leads: number;
+  conversions: number;
+  [key: string]: any;
+}
+
+export function LeadConversionsChart({ data = [] }: { data?: ChartDataPoint[] }) {
+  // Fallback data placeholders formatted but explicitly flagged empty if passed empty
+  const displayData = data.length > 0 ? data : Array.from({ length: 14 }).map((_, i) => ({
+    date: `D-${14 - i}`,
+    leads: 0,
+    conversions: 0
+  }));
 
   return (
     <div className="bg-white dark:bg-[#111827] rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] shadow-sm p-6 transition-colors duration-300">
       <div className="mb-4">
         <h3 className="font-semibold text-[#111827] dark:text-[#F9FAFB]">
-          Lead Conversions — Last 14 Days
+          Lead Conversions
         </h3>
         <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mt-0.5">
           Daily leads received vs converted
         </p>
       </div>
       <ResponsiveContainer width="100%" height={220}>
-        <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+        <AreaChart data={displayData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#22C55E" stopOpacity={0.15} />
@@ -44,11 +56,11 @@ export function LeadConversionsChart() {
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#F9FAFB" opacity={0.1} />
           <XAxis
-            dataKey="date"
+            dataKey={displayData[0]?.date ? "date" : "day"}
             tick={{ fontSize: 10, fill: "#6B7280" }}
             tickLine={false}
             axisLine={false}
-            interval={2}
+            interval={data.length > 10 ? Math.floor(data.length/6) : 0}
           />
           <YAxis
             tick={{ fontSize: 10, fill: "#6B7280" }}
@@ -88,7 +100,12 @@ export function LeadConversionsChart() {
   );
 }
 
-export function LeadSourcesChart() {
+export function LeadSourcesChart({ data = [] }: { data?: { name: string; value: number; color: string }[] }) {
+  const fallbackColors = ["#22C55E", "#3B82F6", "#EAB308", "#F97316", "#EF4444"];
+  const displayData = data.length > 0 ? data : [
+    { name: "No Data", value: 100, color: "#E5E7EB" }
+  ];
+
   return (
     <div className="bg-white dark:bg-[#111827] rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] shadow-sm p-6 transition-colors duration-300">
       <div className="mb-4">
@@ -100,7 +117,7 @@ export function LeadSourcesChart() {
       <ResponsiveContainer width="100%" height={220}>
         <PieChart>
           <Pie
-            data={mockPieData}
+            data={displayData}
             cx="50%"
             cy="50%"
             innerRadius={55}
@@ -108,8 +125,8 @@ export function LeadSourcesChart() {
             paddingAngle={3}
             dataKey="value"
           >
-            {mockPieData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} />
+            {displayData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.color || fallbackColors[index % fallbackColors.length]} />
             ))}
           </Pie>
           <Tooltip
@@ -119,7 +136,7 @@ export function LeadSourcesChart() {
               borderRadius: "8px",
               fontSize: "12px",
             }}
-            formatter={(value) => [`${value}%`, ""]}
+            formatter={(value) => [`${value}`, "Count"]}
           />
           <Legend
             wrapperStyle={{ fontSize: "11px" }}
@@ -133,7 +150,7 @@ export function LeadSourcesChart() {
   );
 }
 
-export function DailyBarChart() {
+export function DailyBarChart({ data = [] }: { data?: { day: string; leads: number; conversions: number }[] }) {
   return (
     <div className="bg-white dark:bg-[#111827] rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] shadow-sm p-6 transition-colors duration-300">
       <div className="mb-4">
@@ -143,7 +160,7 @@ export function DailyBarChart() {
         <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mt-0.5">Last 7 days</p>
       </div>
       <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={mockBarData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+        <BarChart data={data.length > 0 ? data : []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#F9FAFB" opacity={0.1} vertical={false} />
           <XAxis
             dataKey="day"
@@ -169,56 +186,53 @@ export function DailyBarChart() {
           <Bar dataKey="conversions" fill="#22C55E" radius={[4, 4, 0, 0]} name="Conversions" />
         </BarChart>
       </ResponsiveContainer>
+      {data.length === 0 && (
+         <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/30 pointer-events-none rounded-xl">
+             <p className="text-sm font-medium text-gray-500">No data tracked yet</p>
+         </div>
+      )}
     </div>
   );
 }
 
-export function ConversionByServiceChart() {
-  const data = [
-    { service: "Dental", rate: 74 },
-    { service: "Real Estate", rate: 61 },
-    { service: "Salon", rate: 58 },
-    { service: "Other", rate: 52 },
-  ];
-
+export function ConversionByServiceChart({ data = [] }: { data?: { service: string; rate: number }[] }) {
   return (
     <div className="bg-white dark:bg-[#111827] rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] shadow-sm p-6 transition-colors duration-300">
       <div className="mb-4">
         <h3 className="font-semibold text-[#111827] dark:text-[#F9FAFB]">
-          Conversion by Service Type
+          Distribution by Service Type
         </h3>
         <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] mt-0.5">
-          Conversion rate per service
+          Share per interested service
         </p>
       </div>
       <div className="space-y-4 pt-2">
-        {data.map((item) => (
-          <div key={item.service}>
-            <div className="flex justify-between text-sm mb-1.5">
-              <span className="font-medium text-[#111827] dark:text-[#F9FAFB]">{item.service}</span>
-              <span className="text-[#22C55E] font-semibold">{item.rate}%</span>
+        {data.length === 0 ? (
+          <div className="text-center text-xs text-gray-500 py-4">No leads data available</div>
+        ) : (
+          data.map((item) => (
+            <div key={item.service}>
+              <div className="flex justify-between text-sm mb-1.5">
+                <span className="font-medium text-[#111827] dark:text-[#F9FAFB]">{item.service}</span>
+                <span className="text-[#22C55E] font-semibold">{item.rate}%</span>
+              </div>
+              <div className="h-2 bg-[#F9FAFB] dark:bg-[#0B0F1A] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#22C55E] rounded-full"
+                  style={{ width: `${item.rate}%` }}
+                />
+              </div>
             </div>
-            <div className="h-2 bg-[#F9FAFB] dark:bg-[#0B0F1A] rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#22C55E] rounded-full"
-                style={{ width: `${item.rate}%` }}
-              />
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-export function ResponseTimeChart() {
-  const data = mockChartData.slice(-14).map((d, i) => ({
-    ...d,
-    responseTime: +(0.5 + Math.random() * 0.6).toFixed(1),
-  }));
-
+export function ResponseTimeChart({ data = [] }: { data?: { date?: string; day?: string; responseTime: number }[] }) {
   return (
-    <div className="bg-white dark:bg-[#111827] rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] shadow-sm p-6 transition-colors duration-300">
+    <div className="bg-white dark:bg-[#111827] rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] shadow-sm p-6 transition-colors duration-300 relative">
       <div className="mb-4">
         <h3 className="font-semibold text-[#111827] dark:text-[#F9FAFB]">
           Response Time Distribution
@@ -235,17 +249,16 @@ export function ResponseTimeChart() {
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#F9FAFB" opacity={0.1} />
           <XAxis
-            dataKey="date"
+            dataKey="day"
             tick={{ fontSize: 10, fill: "#6B7280" }}
             tickLine={false}
             axisLine={false}
-            interval={2}
           />
           <YAxis
             tick={{ fontSize: 10, fill: "#6B7280" }}
             tickLine={false}
             axisLine={false}
-            domain={[0, 2]}
+            domain={[0, 'dataMax + 0.5']}
           />
           <Tooltip
             contentStyle={{
@@ -266,18 +279,19 @@ export function ResponseTimeChart() {
           />
         </AreaChart>
       </ResponsiveContainer>
+      {data.length === 0 && (
+         <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-[#111827]/80 rounded-xl z-10">
+             <p className="text-sm font-medium text-[#6B7280] dark:text-[#9CA3AF]">No response time data available</p>
+         </div>
+      )}
     </div>
   );
 }
 
-export function LeadFunnelChart() {
-  const stages = [
-    { label: "Received", value: 142, color: "#86EFAC" },
-    { label: "Replied", value: 128, color: "#4ADE80" },
-    { label: "Qualified", value: 97, color: "#22C55E" },
-    { label: "Booked", value: 89, color: "#16A34A" },
-  ];
-  const max = stages[0].value;
+export function LeadFunnelChart({ data = [] }: { data?: { label: string; value: number }[] }) {
+  const fallbackColors = ["#86EFAC", "#4ADE80", "#22C55E", "#16A34A", "#15803D"];
+  
+  const max = data.length > 0 ? Math.max(...data.map(d => d.value), 1) : 1;
 
   return (
     <div className="bg-white dark:bg-[#111827] rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] shadow-sm p-6 transition-colors duration-300">
@@ -288,27 +302,32 @@ export function LeadFunnelChart() {
         </p>
       </div>
       <div className="space-y-3">
-        {stages.map((stage) => (
-          <div key={stage.label} className="flex items-center gap-4">
-            <span className="text-xs font-medium text-[#6B7280] dark:text-[#9CA3AF] w-20 shrink-0">
-              {stage.label}
-            </span>
-            <div className="flex-1 h-7 bg-[#F9FAFB] dark:bg-[#0B0F1A] rounded-md overflow-hidden">
-              <div
-                className="h-full rounded-md flex items-center pl-3 transition-all duration-500"
-                style={{
-                  width: `${(stage.value / max) * 100}%`,
-                  backgroundColor: stage.color,
-                }}
-              >
-                <span className="text-xs font-bold text-white drop-shadow-sm">
-                  {stage.value}
-                </span>
+        {data.length === 0 ? (
+           <p className="text-xs text-center py-10 text-gray-400">No funnel metrics available</p>
+        ) : (
+          data.map((stage, index) => (
+            <div key={stage.label} className="flex items-center gap-4">
+              <span className="text-xs font-medium text-[#6B7280] dark:text-[#9CA3AF] w-20 shrink-0">
+                {stage.label}
+              </span>
+              <div className="flex-1 h-7 bg-[#F9FAFB] dark:bg-[#0B0F1A] rounded-md overflow-hidden">
+                <div
+                  className="h-full rounded-md flex items-center pl-3 transition-all duration-500"
+                  style={{
+                    width: `${Math.max((stage.value / max) * 100, 2)}%`,
+                    backgroundColor: fallbackColors[index % fallbackColors.length],
+                  }}
+                >
+                  <span className="text-xs font-bold text-white drop-shadow-sm">
+                    {stage.value}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
 }
+

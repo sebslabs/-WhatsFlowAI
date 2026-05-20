@@ -1,0 +1,151 @@
+version: '3.9'
+
+# ── WhatsFlow AI — Production Docker Compose ──────────────────────
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f api
+#
+# For production, replace Redis with Upstash and Postgres with Supabase.
+# This file is for local development and staging environments.
+
+services:
+
+  # ── API Server ─────────────────────────────────────────────────
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: runner
+    container_name: whatsflow-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file: ./server/.env
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      replicas: 2                    # Horizontal scaling — both share Redis adapter
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+
+  # ── Inbound Message Worker ────────────────────────────────────
+  worker-inbound:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: runner
+    container_name: whatsflow-worker-inbound
+    restart: unless-stopped
+    env_file: ./server/.env
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+    command: ["node", "dist/workers/webhook.worker.js"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.5'
+
+  # ── Outbound Message Worker ────────────────────────────────────
+  worker-outbound:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: runner
+    container_name: whatsflow-worker-outbound
+    restart: unless-stopped
+    env_file: ./server/.env
+    environment:
+      NODE_ENV:           production
+      REDIS_URL:          redis://redis:6379
+      OUTBOUND_CONCURRENCY: "3"
+      OUTBOUND_RATE_LIMIT:  "30"
+    command: ["node", "dist/workers/outbound.worker.js"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.5'
+
+  # ── Redis ──────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: whatsflow-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Next.js Frontend ───────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: whatsflow-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file: .env.local
+    environment:
+      NODE_ENV:         production
+      NEXT_PUBLIC_API_URL: http://api:5000
+    depends_on:
+      - api
+
+  # ── BullBoard (Queue Monitoring UI) ───────────────────────────
+  bullboard:
+    image: ghcr.io/felixmosh/bull-board:latest
+    container_name: whatsflow-bullboard
+    restart: unless-stopped
+    # MEDIUM FIX (#6): Bull Board is restricted to the internal Docker network ONLY.
+    # The public port mapping (3001:3000) has been REMOVED — it is not reachable
+    # from outside the Compose network. Access it via SSH tunnel or internal VPN:
+    #   ssh -L 3001:whatsflow-bullboard:3000 user@host
+    # Basic auth is enforced: BULL_BOARD_USER and BULL_BOARD_PASSWORD must be
+    # set in server/.env — Docker will refuse to start if they are absent.
+    networks:
+      - default
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      BULL_BOARD_USER: ${BULL_BOARD_USER:?BULL_BOARD_USER must be set in .env}
+      BULL_BOARD_PASSWORD: ${BULL_BOARD_PASSWORD:?BULL_BOARD_PASSWORD must be set in .env}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  default:
+    name: whatsflow-net

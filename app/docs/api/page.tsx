@@ -1,13 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MessageCircle, Copy, Check, Terminal, Globe, Shield, Zap } from "lucide-react";
+import { MessageCircle, Copy, Check, Terminal, Globe, Shield, Zap, Settings, Link, Info } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 
 const sections = [
   { id: "intro", title: "Introduction" },
+  { id: "config", title: "WhatsApp Setup" },
   { id: "auth", title: "Authentication" },
   { id: "send", title: "Send Message" },
   { id: "leads", title: "Lead Management" },
@@ -98,6 +99,63 @@ export default function APIDocsPage() {
               <p className="text-lg text-[#6B7B6B] leading-relaxed max-w-2xl">
                 The WhatsFlow AI API allows you to programmatically manage your WhatsApp conversations, leads, and automation workflows. Integrate WhatsFlow directly into your own applications, CRM, or custom tools.
               </p>
+            </section>
+
+            {/* WhatsApp Setup */}
+            <section id="config" className="scroll-mt-32">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-[#F0FDF4] flex items-center justify-center text-[#16A34A]">
+                  <Settings className="w-5 h-5" />
+                </div>
+                <h2 className="text-2xl font-bold">WhatsApp Setup</h2>
+              </div>
+              <p className="text-[#6B7B6B] mb-6 leading-relaxed">
+                Connect your official Meta WhatsApp Business Account to WhatsFlow AI using simple technical steps to unlock automated conversation pipelines.
+              </p>
+
+              <div className="grid gap-6">
+                <div className="bg-white border border-[#E2EDE2] rounded-2xl p-6 flex gap-4 items-start">
+                  <div className="w-8 h-8 shrink-0 rounded-lg bg-[#E2EDE2] flex items-center justify-center text-[#0F1F0F] font-bold text-sm">1</div>
+                  <div>
+                    <h3 className="font-bold text-[#0F1F0F] mb-1">Gather Meta Credentials</h3>
+                    <p className="text-sm text-[#6B7B6B] mb-3">Locate your credentials inside the Meta Developer Dashboard under "WhatsApp {'>'} API Setup".</p>
+                    <ul className="space-y-1.5 text-sm text-[#6B7B6B]">
+                      <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#16A34A]" /> <span className="font-mono text-xs text-[#0F1F0F]">Phone Number ID</span></li>
+                      <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#16A34A]" /> <span className="font-mono text-xs text-[#0F1F0F]">WhatsApp Business Account ID</span></li>
+                      <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-[#16A34A]" /> <span className="font-mono text-xs text-[#0F1F0F]">System User Access Token</span></li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-[#E2EDE2] rounded-2xl p-6 flex gap-4 items-start">
+                  <div className="w-8 h-8 shrink-0 rounded-lg bg-[#E2EDE2] flex items-center justify-center text-[#0F1F0F] font-bold text-sm">2</div>
+                  <div className="w-full">
+                    <h3 className="font-bold text-[#0F1F0F] mb-1">Submit API Connection</h3>
+                    <p className="text-sm text-[#6B7B6B] mb-4">Send an authorized request to bind your Meta credentials securely to WhatsFlow.</p>
+                    <div className="bg-[#0F1F0F] rounded-xl p-4">
+                      <pre className="text-[11px] text-[#16A34A] font-mono whitespace-pre-wrap leading-relaxed">
+{`POST /api/whatsapp/connect
+{
+  "phone_number_id": "1059...",
+  "business_account_id": "8842...",
+  "access_token": "EAAGZ..."
+}`}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-[#E2EDE2] rounded-2xl p-6 flex gap-4 items-start">
+                  <div className="w-8 h-8 shrink-0 rounded-lg bg-[#E2EDE2] flex items-center justify-center text-[#0F1F0F] font-bold text-sm">3</div>
+                  <div>
+                    <h3 className="font-bold text-[#0F1F0F] mb-1">Register Callback Webhook</h3>
+                    <p className="text-sm text-[#6B7B6B] mb-2">Enter the global WhatsFlow listener into Meta webhook config so the AI sees incoming texts:</p>
+                    <div className="bg-[#F8FAF8] border border-[#E2EDE2] rounded-lg px-3 py-2 font-mono text-xs text-[#16A34A] font-bold">
+                      https://api.whatsflow.ai/v1/whatsapp/webhook
+                    </div>
+                  </div>
+                </div>
+              </div>
             </section>
 
             {/* Auth */}

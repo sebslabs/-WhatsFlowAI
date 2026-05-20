@@ -15,6 +15,8 @@
 
 # misc
 .DS_Store
+.baileys-auth/
+sessions/
 *.pem
 
 # debug
@@ -38,4 +40,15 @@ next-env.d.ts
 .env.local
 server/.env
 server/node_modules/
+server/dist/
+server/src/**/*.js
+server/src/**/*.js.map
+server/src/**/*.d.ts
+server/src/**/*.d.ts.map
 
+# MEDIUM FIX (#10): scratch/ contains ad-hoc debug scripts used during development.
+# These scripts often contain hardcoded credentials, DB IDs, or exploratory queries
+# and must never be committed to the repository or shipped to production.
+# To share a useful script with the team, move it to server/scripts/ or tools/ instead.
+/scratch/
+scratch/

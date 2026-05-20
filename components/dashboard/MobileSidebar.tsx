@@ -20,6 +20,8 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 const navItems = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -35,6 +37,38 @@ export function MobileSidebar() {
   const { isMobileOpen, setIsMobileOpen } = useSidebar();
   const pathname = usePathname();
   const router = useRouter();
+  const [user, setUser] = useState<{ email?: string; name?: string } | null>(null);
+
+  useEffect(() => {
+    async function fetchUser() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUser({
+          email: user.email,
+          name: user.user_metadata?.full_name || user.email?.split('@')[0] || "User",
+        });
+      }
+    }
+    if (isMobileOpen) {
+      fetchUser();
+    }
+  }, [isMobileOpen]);
+
+  const handleLogout = async () => {
+    try {
+      setIsMobileOpen(false);
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Error during logout:", err);
+    } finally {
+      localStorage.removeItem("isLoggedIn");
+      window.location.href = "/";
+    }
+  };
+
+  const initials = user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || "?";
 
   return (
     <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
@@ -109,22 +143,18 @@ export function MobileSidebar() {
 
           <div className="flex items-center gap-3 px-2 py-2">
             <div className="w-10 h-10 rounded-full bg-[#16A34A] flex items-center justify-center shrink-0 shadow-sm border-2 border-white">
-              <span className="text-white text-sm font-bold">JD</span>
+              <span className="text-white text-sm font-bold">{initials}</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-[#0F1F0F] truncate">
-                John Doe
+                {user?.name || "User"}
               </p>
               <p className="text-xs text-[#6B7B6B] truncate">
-                john@business.com
+                {user?.email || ""}
               </p>
             </div>
             <button
-              onClick={() => {
-                setIsMobileOpen(false);
-                localStorage.removeItem("isLoggedIn");
-                router.push("/auth/login");
-              }}
+              onClick={handleLogout}
               className="p-2 rounded-md text-red-500 bg-red-50 hover:bg-red-100 dark:bg-red-900/40 dark:hover:bg-red-800/50 hover:text-red-600 transition-all shrink-0 flex items-center justify-center"
               title="Logout"
             >

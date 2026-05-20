@@ -17,6 +17,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeading } from "@/components/dashboard/PageHeading";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 type TemplateStatus = "APPROVED" | "PENDING" | "REJECTED" | "DRAFT";
 type TemplateCategory = "UTILITY" | "MARKETING" | "AUTHENTICATION";
@@ -82,40 +83,7 @@ const BLANK_FORM: TemplateForm = {
   buttons: [{ type: "QUICK_REPLY", text: "", value: "" }],
 };
 
-const DEFAULT_TEMPLATES: WhatsAppTemplate[] = [
-  {
-    id: "wt-1",
-    name: "welcome_message",
-    category: "MARKETING",
-    language: "en_US",
-    status: "APPROVED",
-    components: {
-      header: { type: "TEXT", text: "Welcome to WhatsFlow AI!" },
-      body: { text: "Hello {{1}},\n\nThank you for opting in to receive communications. We're excited to support your business expansion! ✨\n\nKind regards,\nThe WhatsFlow Team" },
-      footer: { text: "Standard messaging rates apply." },
-      buttons: [
-        { type: "URL", text: "Visit Our Portal", value: "https://whatsflow.ai" },
-        { type: "QUICK_REPLY", text: "Get Started Now" }
-      ]
-    },
-    created_at: "2026-04-12T14:20:00Z"
-  },
-  {
-    id: "wt-2",
-    name: "appointment_reminder",
-    category: "UTILITY",
-    language: "en_US",
-    status: "APPROVED",
-    components: {
-      body: { text: "Hi {{1}}, this is a friendly reminder for your upcoming session on {{2}} at {{3}}.\n\nPlease reply CONFIRM to accept." },
-      buttons: [
-        { type: "QUICK_REPLY", text: "Confirm Booking" },
-        { type: "QUICK_REPLY", text: "Reschedule Session" }
-      ]
-    },
-    created_at: "2026-04-28T09:15:00Z"
-  }
-];
+// Removed DEFAULT_TEMPLATES static array
 
 function genId() { return "wt-" + Math.random().toString(36).slice(2, 9); }
 function formatMetaName(v: string) {
@@ -130,6 +98,7 @@ export default function TemplatesPage() {
   const [categoryFilter, setCategoryFilter] = useState<TemplateCategory | "all">("all");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WhatsAppTemplate | null>(null);
+  const [deletingTemplate, setDeletingTemplate] = useState<WhatsAppTemplate | null>(null);
 
   useEffect(() => {
     async function loadTemplates() {
@@ -138,22 +107,11 @@ export default function TemplatesPage() {
         if (data && data.length > 0) {
           setTemplates(data);
         } else {
-          const localStored = localStorage.getItem("whatsapp_templates");
-          if (localStored) {
-            setTemplates(JSON.parse(localStored));
-          } else {
-            setTemplates(DEFAULT_TEMPLATES);
-            localStorage.setItem("whatsapp_templates", JSON.stringify(DEFAULT_TEMPLATES));
-          }
+          setTemplates([]);
         }
       } catch (err) {
-        const localStored = localStorage.getItem("whatsapp_templates");
-        if (localStored) {
-          setTemplates(JSON.parse(localStored));
-        } else {
-          setTemplates(DEFAULT_TEMPLATES);
-          localStorage.setItem("whatsapp_templates", JSON.stringify(DEFAULT_TEMPLATES));
-        }
+        setTemplates([]);
+        console.error("Template load error:", err);
       } finally {
         setLoading(false);
       }
@@ -161,10 +119,7 @@ export default function TemplatesPage() {
     loadTemplates();
   }, []);
 
-  const syncTemplates = async (updated: WhatsAppTemplate[]) => {
-    setTemplates(updated);
-    localStorage.setItem("whatsapp_templates", JSON.stringify(updated));
-  };
+  // Handlers directly reference setTemplates
 
   const filtered = templates.filter(t => {
     const matchesSearch = t.name.toLowerCase().includes(search.toLowerCase());
@@ -176,8 +131,7 @@ export default function TemplatesPage() {
     try {
       await apiFetch(`/api/whatsapp-templates/${id}`, { method: "DELETE" });
     } catch (err) {}
-    const updated = templates.filter(t => t.id !== id);
-    await syncTemplates(updated);
+    setTemplates(templates.filter(t => t.id !== id));
     toast("Template successfully deleted", "success");
   };
 
@@ -196,7 +150,7 @@ export default function TemplatesPage() {
         body: JSON.stringify(copy)
       });
     } catch (err) {}
-    await syncTemplates([copy, ...templates]);
+    setTemplates([copy, ...templates]);
     toast("Template duplicated", "success");
   };
 
@@ -281,11 +235,26 @@ export default function TemplatesPage() {
                 setEditingTemplate(t);
                 setSheetOpen(true);
               }}
-              onDelete={() => handleDelete(t.id)}
+              onDelete={() => setDeletingTemplate(t)}
               onDuplicate={() => handleDuplicate(t)}
             />
           ))}
         </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deletingTemplate && (
+        <ConfirmDeleteDialog
+          open={!!deletingTemplate}
+          onOpenChange={(open) => !open && setDeletingTemplate(null)}
+          title={`Delete Template "${deletingTemplate.name}"?`}
+          description="This action cannot be undone. If this template is actively used in automations, those flows may fail."
+          onConfirm={async () => {
+            await handleDelete(deletingTemplate.id);
+            setDeletingTemplate(null);
+          }}
+          trigger={<span className="hidden" />}
+        />
       )}
 
       {/* Slideout Form Panel */}
@@ -307,9 +276,9 @@ export default function TemplatesPage() {
           if (index >= 0) {
             const copy = [...templates];
             copy[index] = saved;
-            await syncTemplates(copy);
+            setTemplates(copy);
           } else {
-            await syncTemplates([saved, ...templates]);
+            setTemplates([saved, ...templates]);
           }
           setSheetOpen(false);
           setEditingTemplate(null);

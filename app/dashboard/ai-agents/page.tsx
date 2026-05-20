@@ -6,6 +6,7 @@ import {
   Plus, Bot, Edit3, Trash2, Send, Wand2, RefreshCw, Pause, Play,
   Loader2, AlertCircle, Brain, BookOpen, X, PlusCircle, Cpu,
   ChevronDown, ChevronUp, Globe, FileText, MessageSquare, Building2,
+  Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,10 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api-config";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type KbSourceType = "business_context" | "faq" | "website_url" | "plain_text";
+type KbSourceType = "business_context" | "faq" | "website_url" | "plain_text" | "existing_asset";
 
 interface FaqEntry {
   id: string;
@@ -39,6 +41,13 @@ interface KbSource {
   // plain_text
   text?: string;
   label?: string;
+  assetId?: string;
+
+  // Dynamic Scraper States
+  scrapingStatus?: string;
+  scrapingProgress?: number;
+  scrapingError?: string;
+  activeJobId?: string | null;
 }
 
 interface Agent {
@@ -52,6 +61,7 @@ interface Agent {
   status: "active" | "paused";
   created_at?: string;
   pipeline?: string;
+  phoneNumber?: string;
 }
 
 interface ChatMessage {
@@ -69,25 +79,53 @@ const TONE_OPTIONS = [
 ];
 
 const MODEL_OPTIONS = [
+  // Google
+  { value: "gemini-1-5-flash",   label: "Gemini 1.5 Flash",  badge: "Recommended / Fast", provider: "Google", logo: "https://img.icons8.com/ios-glyphs/30/bard.png" },
+  { value: "gemini-1-5-pro",     label: "Gemini 1.5 Pro",    badge: "Large Context", provider: "Google", logo: "https://img.icons8.com/ios-glyphs/30/bard.png" },
+
+  // Groq
+  { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B (Groq)", badge: "Ultra-Fast / Elite", provider: "Groq", logo: "https://img.icons8.com/ios-filled/50/lightning-bolt.png" },
+  { value: "llama-3.1-8b-instant",   label: "Llama 3.1 8B (Groq)",   badge: "Pure Speed",        provider: "Groq", logo: "https://img.icons8.com/ios-filled/50/lightning-bolt.png" },
+
   // OpenAI
-  { value: "gpt-4o",             label: "GPT-4o",            badge: "Recommended", provider: "OpenAI", emoji: "⚡" },
-  { value: "gpt-4o-mini",        label: "GPT-4o Mini",       badge: "Fast",        provider: "OpenAI", emoji: "💨" },
-  { value: "o1-preview",         label: "OpenAI o1 Preview", badge: "Smart",       provider: "OpenAI", emoji: "🧠" },
-  { value: "o1-mini",            label: "OpenAI o1 Mini",    badge: "Reasoning",   provider: "OpenAI", emoji: "🧩" },
-  { value: "gpt-4-turbo",        label: "GPT-4 Turbo",       badge: "Complex",     provider: "OpenAI", emoji: "🤖" },
+  { value: "gpt-4o",             label: "GPT-4o",            badge: "Smart",       provider: "OpenAI", logo: "https://img.icons8.com/ios-glyphs/30/chatgpt.png" },
+  { value: "gpt-4o-mini",        label: "GPT-4o Mini",       badge: "Fast",        provider: "OpenAI", logo: "https://img.icons8.com/ios-glyphs/30/chatgpt.png" },
+  { value: "o1-preview",         label: "OpenAI o1 Preview", badge: "Reasoning",   provider: "OpenAI", logo: "https://img.icons8.com/ios-glyphs/30/chatgpt.png" },
+  { value: "o1-mini",            label: "OpenAI o1 Mini",    badge: "Compact",     provider: "OpenAI", logo: "https://img.icons8.com/ios-glyphs/30/chatgpt.png" },
+  { value: "gpt-4-turbo",        label: "GPT-4 Turbo",       badge: "Complex",     provider: "OpenAI", logo: "https://img.icons8.com/ios-glyphs/30/chatgpt.png" },
   
   // Anthropic
-  { value: "claude-3-5-sonnet",  label: "Claude 3.5 Sonnet", badge: "Smart",       provider: "Anthropic", emoji: "🎭" },
-  { value: "claude-3-5-haiku",   label: "Claude 3.5 Haiku",  badge: "Economy",     provider: "Anthropic", emoji: "⚡" },
-  { value: "claude-3-opus",      label: "Claude 3 Opus",     badge: "Power",       provider: "Anthropic", emoji: "🪐" },
-
-  // Google
-  { value: "gemini-1-5-pro",     label: "Gemini 1.5 Pro",    badge: "Large Context", provider: "Google", emoji: "💎" },
-  { value: "gemini-1-5-flash",   label: "Gemini 1.5 Flash",  badge: "Fastest",     provider: "Google", emoji: "✨" },
+  { value: "claude-3-5-sonnet",  label: "Claude 3.5 Sonnet", badge: "Intelligent", provider: "Anthropic", logo: "https://img.icons8.com/ios-glyphs/30/claude-ai.png" },
+  { value: "claude-3-5-haiku",   label: "Claude 3.5 Haiku",  badge: "Economy",     provider: "Anthropic", logo: "https://img.icons8.com/ios-glyphs/30/claude-ai.png" },
+  { value: "claude-3-opus",      label: "Claude 3 Opus",     badge: "Power",       provider: "Anthropic", logo: "https://img.icons8.com/ios-glyphs/30/claude-ai.png" },
 
   // Meta
-  { value: "llama-3-1-70b",      label: "Llama 3.1 70B",     badge: "Open Source", provider: "Meta",   emoji: "🦙" },
-  { value: "llama-3-1-8b",       label: "Llama 3.1 8B",      badge: "Lightweight", provider: "Meta",   emoji: "🐑" },
+  { value: "llama-3-1-70b",      label: "Llama 3.1 70B",     badge: "Open Source", provider: "Meta",   logo: "https://img.icons8.com/ios-filled/50/meta.png" },
+  { value: "llama-3-1-8b",       label: "Llama 3.1 8B",      badge: "Lightweight", provider: "Meta",   logo: "https://img.icons8.com/ios-filled/50/meta.png" },
+
+  // Perplexity
+  { value: "sonar-small-online", label: "Sonar Small",       badge: "Online / Search", provider: "Perplexity", logo: "https://img.icons8.com/ios-filled/50/perplexity-ai.png" },
+  { value: "sonar-medium-online",label: "Sonar Medium",      badge: "Fast / Smart",  provider: "Perplexity", logo: "https://img.icons8.com/ios-filled/50/perplexity-ai.png" },
+
+  // Mistral AI
+  { value: "mistral-large-latest", label: "Mistral Large",   badge: "Enterprise / Smart", provider: "Mistral", logo: "https://img.icons8.com/ios-filled/50/wind.png" },
+  { value: "mistral-small-latest", label: "Mistral Small",   badge: "Cost-Effective",     provider: "Mistral", logo: "https://img.icons8.com/ios-filled/50/wind.png" },
+  { value: "open-mixtral-8x7b",    label: "Mixtral 8x7B",    badge: "Fast Open Weights",  provider: "Mistral", logo: "https://img.icons8.com/ios-filled/50/wind.png" },
+
+  // DeepSeek
+  { value: "deepseek-chat",      label: "DeepSeek Chat",     badge: "Efficiency",    provider: "DeepSeek", logo: "https://img.icons8.com/ios-filled/50/deepseek.png" },
+  { value: "deepseek-coder",     label: "DeepSeek Coder",    badge: "Logic",         provider: "DeepSeek", logo: "https://img.icons8.com/ios-filled/50/deepseek.png" },
+
+  // Grok
+  { value: "grok-2",             label: "Grok 2",            badge: "Real-time",   provider: "Grok", logo: "https://img.icons8.com/ios-filled/50/grok.png" },
+
+  // Jasper AI
+  { value: "jasper-ai",          label: "Jasper AI",         badge: "Marketing",   provider: "Jasper AI", logo: "https://img.icons8.com/ios-filled/50/jasper-ai.png" },
+
+  // OpenRouter (Cost-Cutting)
+  { value: "openrouter/google/gemini-flash-1.5",           label: "Gemini 1.5 Flash (OpenRouter)",   badge: "Recommended / Cheap", provider: "OpenRouter", logo: "https://img.icons8.com/ios-glyphs/30/bard.png" },
+  { value: "openrouter/meta-llama/llama-3.1-8b-instruct",  label: "Llama 3.1 8B (OpenRouter)",       badge: "Almost Free",         provider: "OpenRouter", logo: "https://img.icons8.com/ios-filled/50/meta.png" },
+  { value: "openrouter/deepseek/deepseek-chat",            label: "DeepSeek V2.5 (OpenRouter)",      badge: "Elite / Cheap",       provider: "OpenRouter", logo: "https://img.icons8.com/ios-filled/50/deepseek.png" },
 ];
 
 const PIPELINE_OPTIONS = [
@@ -103,6 +141,7 @@ const KB_SOURCE_TYPES: { type: KbSourceType; label: string; desc: string; icon: 
   { type: "faq",              label: "FAQ / Q&A",         desc: "Common questions and answers",          icon: MessageSquare },
   { type: "website_url",      label: "Website URL",       desc: "Scrape content from a webpage",        icon: Globe },
   { type: "plain_text",       label: "Plain Text",        desc: "Add any text as a knowledge chunk",    icon: FileText },
+  { type: "existing_asset",   label: "Linked Asset",      desc: "Stored knowledge reference",            icon: Database },
 ];
 
 const selectItemClass =
@@ -119,6 +158,7 @@ export default function AIAgentsPage() {
 
   const [isCreating, setIsCreating] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Form fields
@@ -126,13 +166,15 @@ export default function AIAgentsPage() {
   const [role, setRole] = useState("");
   const [instructions, setInstructions] = useState("");
   const [tone, setTone] = useState("Professional");
-  const [model, setModel] = useState("gpt-4o");
+  const [model, setModel] = useState("mistral-large-latest");
   const [pipeline, setPipeline] = useState("Default Pipeline");
+  const [phoneNumber, setPhoneNumber] = useState("all");
+  const [availableNumbers, setAvailableNumbers] = useState<{ value: string; label: string }[]>([]);
 
   // KB state
   const [kbOpen, setKbOpen] = useState(false);
   const [kbSources, setKbSources] = useState<KbSource[]>([]);
-  const [addKbType, setAddKbType] = useState<KbSourceType | "">("");
+  const [addKbType, setAddKbType] = useState("");
 
   // Sandbox state
   const [sandboxAgentId, setSandboxAgentId] = useState<string>("");
@@ -143,6 +185,43 @@ export default function AIAgentsPage() {
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
+  async function loadPhoneNumbers() {
+    try {
+      const numbers: { value: string; label: string }[] = [{ value: "all", label: "📱 All Numbers (Default)" }];
+      
+      // Fetch Meta config
+      try {
+        const metaConfig = await apiFetch("/api/whatsapp/config");
+        if (metaConfig && metaConfig.display_phone_number) {
+          numbers.push({
+            value: metaConfig.display_phone_number.replace(/[^\d]/g, ""),
+            label: `🏢 Meta Account: +${metaConfig.display_phone_number}`
+          });
+        }
+      } catch (e) {
+        console.log("No Meta number connected.");
+      }
+      
+      // Fetch QR sessions
+      try {
+        const qrSessions = await apiFetch("/api/whatsapp/qr");
+        const activeQr = qrSessions?.find((s: any) => s.status === 'connected');
+        if (activeQr && activeQr.phone_number) {
+          numbers.push({
+            value: activeQr.phone_number.replace(/[^\d]/g, ""),
+            label: `🔗 QR Connection: +${activeQr.phone_number}`
+          });
+        }
+      } catch (e) {
+        console.log("No QR number connected.");
+      }
+      
+      setAvailableNumbers(numbers);
+    } catch (err) {
+      console.error("Failed to load active phone numbers:", err);
+    }
+  }
+
   async function loadAgents() {
     setLoading(true); setLoadError("");
     try {
@@ -150,9 +229,10 @@ export default function AIAgentsPage() {
       const localExtras = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("ai_agents_extras") || "{}") : {};
       const merged = data.map((a: Agent) => ({
         ...a,
-        model: localExtras[a.id]?.model ?? a.model ?? "gpt-4o",
+        model: localExtras[a.id]?.model ?? a.model ?? "mistral-large-latest",
         pipeline: localExtras[a.id]?.pipeline ?? a.pipeline ?? "Default Pipeline",
-        kbSources: localExtras[a.id]?.kbSources ?? a.kbSources ?? []
+        kbSources: (a.kbSources?.length ? a.kbSources : localExtras[a.id]?.kbSources) ?? [],
+        phoneNumber: a.phoneNumber ?? "all"
       }));
       setAgents(merged);
       if (merged.length > 0) {
@@ -167,15 +247,166 @@ export default function AIAgentsPage() {
     }
   }
 
-  useEffect(() => { loadAgents(); }, []);
+  const [globalKbItems, setGlobalKbItems] = useState<any[]>([]);
+
+  useEffect(() => { 
+    loadAgents(); 
+    loadPhoneNumbers();
+  }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatHistory, isTyping]);
+
+  useEffect(() => {
+    async function loadGlobalKb() {
+      try {
+        const data = await apiFetch("/api/knowledge");
+        if (data && Array.isArray(data)) {
+          setGlobalKbItems(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch knowledge sources:", err);
+      }
+    }
+    loadGlobalKb();
+  }, []);
+
+  const getSourceScrapeProgressMessage = (status?: string, progress?: number, error?: string) => {
+    switch (status) {
+      case "queued": return "Queueing website scraping task...";
+      case "scraping": return "Initializing browser, downloading HTML code...";
+      case "processing": return "Cleaning HTML clutter, parsing semantic text blocks...";
+      case "embedding": return `Calculating AI vector matrices (${progress ?? 0}%)...`;
+      case "completed": return "Website successfully ingested and vectorized!";
+      case "failed": return `Scraping failed: ${error || "Unknown error"}`;
+      default: return "Scraping...";
+    }
+  };
+
+  async function handleScrapeWebsite(sourceId: string, url: string, label: string) {
+    if (!url.trim()) {
+      toast("Please enter a target website URL", "error");
+      return;
+    }
+
+    try {
+      new URL(url); // Basic URL format check
+    } catch {
+      toast("Please enter a valid URL (including http:// or https://)", "error");
+      return;
+    }
+
+    updateKbSource(sourceId, {
+      scrapingStatus: "queued",
+      scrapingProgress: 5,
+      scrapingError: ""
+    });
+
+    try {
+      const res = await apiFetch("/api/scrape", {
+        method: "POST",
+        body: JSON.stringify({
+          url: url.trim(),
+          label: label.trim() || undefined,
+        }),
+      });
+
+      if (res && res.jobId) {
+        updateKbSource(sourceId, {
+          activeJobId: res.jobId,
+          scrapingStatus: res.status || "queued"
+        });
+        toast("Website scraping background task started!", "success");
+      } else {
+        throw new Error("Invalid response received from scraping service.");
+      }
+    } catch (err: any) {
+      updateKbSource(sourceId, {
+        scrapingStatus: "failed",
+        scrapingProgress: 0,
+        scrapingError: err.message || "Failed to start scraping."
+      });
+      toast(err.message || "Failed to trigger scrape operation.", "error");
+    }
+  }
+
+  // Poll scraping progress for any active scraper jobs in kbSources
+  useEffect(() => {
+    const activeJobs = kbSources.filter(s => s.activeJobId && s.scrapingStatus !== "completed" && s.scrapingStatus !== "failed");
+    if (activeJobs.length === 0) return;
+
+    const interval = setInterval(async () => {
+      for (const job of activeJobs) {
+        try {
+          const data = await apiFetch(`/api/scrape/status/${job.activeJobId}`);
+          if (data) {
+            if (data.status === "completed") {
+              toast("Website successfully scraped and trained! ✓", "success");
+              
+              // 1. Reload global KB items
+              let freshKbItems: any[] = [];
+              try {
+                const freshData = await apiFetch("/api/knowledge");
+                if (freshData && Array.isArray(freshData)) {
+                  setGlobalKbItems(freshData);
+                  freshKbItems = freshData;
+                }
+              } catch (e) {
+                console.error("Failed to reload KB items:", e);
+              }
+
+              // 2. Find the asset that was created
+              const matchingAsset = freshKbItems.find((item: any) => item.sourceUrl === job.url || item.title === job.url || item.title === job.label);
+              
+              // 3. Convert source to existing_asset type
+              updateKbSource(job.id, {
+                type: "existing_asset",
+                assetId: matchingAsset?.id || job.activeJobId,
+                label: matchingAsset?.title || job.label || "Linked Scraping Asset",
+                scrapingStatus: "completed",
+                activeJobId: null,
+                scrapingProgress: 100
+              });
+            } else if (data.status === "failed") {
+              updateKbSource(job.id, {
+                scrapingStatus: "failed",
+                activeJobId: null,
+                scrapingError: data.error_message || "Website scraping failed."
+              });
+              toast(data.error_message || "Scraping failed.", "error");
+            } else {
+              updateKbSource(job.id, {
+                scrapingStatus: data.status,
+                scrapingProgress: data.progress
+              });
+            }
+          }
+        } catch (err: any) {
+          console.error("Error polling scrape status for source:", job.id, err);
+        }
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [kbSources]);
 
   // ── KB helpers ────────────────────────────────────────────────────────────
 
   function addKbSource() {
     if (!addKbType) return;
-    const base: KbSource = { id: crypto.randomUUID(), type: addKbType, expanded: true };
-    if (addKbType === "faq") base.faqs = [];
+    let base: KbSource;
+    if (addKbType.startsWith("asset:")) {
+      const assetId = addKbType.split(":")[1];
+      const asset = globalKbItems.find(a => a.id === assetId);
+      base = { 
+        id: crypto.randomUUID(), 
+        type: "existing_asset", 
+        expanded: false, 
+        label: asset?.title || "Linked Knowledge Asset",
+        assetId 
+      };
+    } else {
+      base = { id: crypto.randomUUID(), type: addKbType as KbSourceType, expanded: true };
+      if (addKbType === "faq") base.faqs = [];
+    }
     setKbSources(prev => [...prev, base]);
     setAddKbType("");
   }
@@ -218,7 +449,8 @@ export default function AIAgentsPage() {
   function resetForm() {
     setEditingAgent(null);
     setName(""); setRole(""); setInstructions(""); setTone("Professional");
-    setModel("gpt-4o"); setPipeline("Default Pipeline"); setKbSources([]); setKbOpen(false); setAddKbType("");
+    setModel("mistral-large-latest"); setPipeline("Default Pipeline"); setKbSources([]); setKbOpen(false); setAddKbType("");
+    setPhoneNumber("all");
   }
 
   async function handleSaveAgent() {
@@ -227,7 +459,7 @@ export default function AIAgentsPage() {
       return;
     }
     setSaving(true);
-    const payload = { name, role, instructions, tone, model, kbSources };
+    const payload = { name, role, instructions, tone, model, kbSources, phoneNumber };
     try {
       if (editingAgent) {
         const updated = await apiFetch(`/api/ai-agents/${editingAgent.id}`, {
@@ -236,7 +468,7 @@ export default function AIAgentsPage() {
         const localExtras = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("ai_agents_extras") || "{}") : {};
         localExtras[editingAgent.id] = { model, pipeline, kbSources };
         if (typeof window !== "undefined") localStorage.setItem("ai_agents_extras", JSON.stringify(localExtras));
-        const fullUpdated = { ...updated, model, pipeline, kbSources };
+        const fullUpdated = { ...updated, model, pipeline, kbSources, phoneNumber };
 
         setAgents(prev => prev.map(a => a.id === editingAgent.id ? fullUpdated : a));
         if (sandboxAgentId === editingAgent.id)
@@ -249,7 +481,7 @@ export default function AIAgentsPage() {
         const localExtras = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("ai_agents_extras") || "{}") : {};
         localExtras[created.id] = { model, pipeline, kbSources };
         if (typeof window !== "undefined") localStorage.setItem("ai_agents_extras", JSON.stringify(localExtras));
-        const fullCreated = { ...created, model, pipeline, kbSources };
+        const fullCreated = { ...created, model, pipeline, kbSources, phoneNumber };
 
         setAgents(prev => [fullCreated, ...prev]);
         if (!sandboxAgentId) {
@@ -270,10 +502,11 @@ export default function AIAgentsPage() {
     setEditingAgent(agent);
     setName(agent.name); setRole(agent.role);
     setInstructions(agent.instructions); setTone(agent.tone);
-    setModel(agent.model ?? "gpt-4o");
+    setModel(agent.model ?? "mistral-large-latest");
     setPipeline(agent.pipeline ?? "Default Pipeline");
     setKbSources(agent.kbSources ?? []);
     setKbOpen((agent.kbSources ?? []).length > 0);
+    setPhoneNumber(agent.phoneNumber ?? "all");
     setIsCreating(true);
   }
 
@@ -426,8 +659,8 @@ export default function AIAgentsPage() {
                       <Select value={model} onValueChange={setModel}>
                         <SelectTrigger className={selectTriggerClass}>
                           <div className="flex items-center gap-2 overflow-hidden">
-                            {selectedModel?.emoji ? (
-                              <span className="text-base shrink-0">{selectedModel.emoji}</span>
+                            {selectedModel?.logo ? (
+                              <img src={selectedModel.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />
                             ) : (
                               <Cpu className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />
                             )}
@@ -439,35 +672,22 @@ export default function AIAgentsPage() {
                             )}
                           </div>
                         </SelectTrigger>
-                        <SelectContent className={selectContentClass}>
+                        <SelectContent className={cn(selectContentClass, "max-h-[320px]")} side="bottom">
                           <div className="px-2 pt-2 pb-1">
-                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">OpenAI</p>
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#22C55E]">🌪️ Mistral (Default)</p>
                           </div>
-                          {MODEL_OPTIONS.filter(m => m.provider === "OpenAI").map(opt => (
+                          {MODEL_OPTIONS.filter(m => m.provider === "Mistral").map(opt => (
                             <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
                               <div className="flex items-center justify-between w-full gap-6">
                                 <div className="flex items-center gap-2">
-                                  {opt.emoji && <span className="text-base shrink-0">{opt.emoji}</span>}
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
                                   <span>{opt.label}</span>
                                 </div>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3F4F6] dark:bg-[#1F2937] text-[#6B7280] dark:text-[#9CA3AF]">{opt.badge}</span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#D1FAE5] dark:bg-[#064E3B] text-[#047857] dark:text-[#34D399]">{opt.badge}</span>
                               </div>
                             </SelectItem>
                           ))}
-                          <div className="px-2 pt-3 pb-1">
-                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">Anthropic</p>
-                          </div>
-                          {MODEL_OPTIONS.filter(m => m.provider === "Anthropic").map(opt => (
-                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
-                              <div className="flex items-center justify-between w-full gap-6">
-                                <div className="flex items-center gap-2">
-                                  {opt.emoji && <span className="text-base shrink-0">{opt.emoji}</span>}
-                                  <span>{opt.label}</span>
-                                </div>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3F4F6] dark:bg-[#1F2937] text-[#6B7280] dark:text-[#9CA3AF]">{opt.badge}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
+
                           <div className="px-2 pt-3 pb-1">
                             <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">Google</p>
                           </div>
@@ -475,13 +695,45 @@ export default function AIAgentsPage() {
                             <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
                               <div className="flex items-center justify-between w-full gap-6">
                                 <div className="flex items-center gap-2">
-                                  {opt.emoji && <span className="text-base shrink-0">{opt.emoji}</span>}
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
                                   <span>{opt.label}</span>
                                 </div>
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3F4F6] dark:bg-[#1F2937] text-[#6B7280] dark:text-[#9CA3AF]">{opt.badge}</span>
                               </div>
                             </SelectItem>
                           ))}
+
+                          <div className="px-2 pt-3 pb-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#22C55E]">🔥 Groq (Ultra Fast)</p>
+                          </div>
+                          {MODEL_OPTIONS.filter(m => m.provider === "Groq").map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
+                              <div className="flex items-center justify-between w-full gap-6">
+                                <div className="flex items-center gap-2">
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
+                                  <span>{opt.label}</span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#D1FAE5] dark:bg-[#064E3B] text-[#047857] dark:text-[#34D399]">{opt.badge}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+
+                          <div className="px-2 pt-3 pb-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">OpenAI</p>
+                          </div>
+                          {MODEL_OPTIONS.filter(m => m.provider === "OpenAI").map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
+                              <div className="flex items-center justify-between w-full gap-6">
+                                <div className="flex items-center gap-2">
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
+                                  <span>{opt.label}</span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3F4F6] dark:bg-[#1F2937] text-[#6B7280] dark:text-[#9CA3AF]">{opt.badge}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+
+
                           <div className="px-2 pt-3 pb-1">
                             <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">Meta</p>
                           </div>
@@ -489,10 +741,81 @@ export default function AIAgentsPage() {
                             <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
                               <div className="flex items-center justify-between w-full gap-6">
                                 <div className="flex items-center gap-2">
-                                  {opt.emoji && <span className="text-base shrink-0">{opt.emoji}</span>}
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
                                   <span>{opt.label}</span>
                                 </div>
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3F4F6] dark:bg-[#1F2937] text-[#6B7280] dark:text-[#9CA3AF]">{opt.badge}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                          <div className="px-2 pt-3 pb-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">Perplexity</p>
+                          </div>
+                          {MODEL_OPTIONS.filter(m => m.provider === "Perplexity").map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
+                              <div className="flex items-center justify-between w-full gap-6">
+                                <div className="flex items-center gap-2">
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
+                                  <span>{opt.label}</span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3F4F6] dark:bg-[#1F2937] text-[#6B7280] dark:text-[#9CA3AF]">{opt.badge}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                          <div className="px-2 pt-3 pb-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">DeepSeek</p>
+                          </div>
+                          {MODEL_OPTIONS.filter(m => m.provider === "DeepSeek").map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
+                              <div className="flex items-center justify-between w-full gap-6">
+                                <div className="flex items-center gap-2">
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
+                                  <span>{opt.label}</span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3F4F6] dark:bg-[#1F2937] text-[#6B7280] dark:text-[#9CA3AF]">{opt.badge}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                          <div className="px-2 pt-3 pb-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">Grok</p>
+                          </div>
+                          {MODEL_OPTIONS.filter(m => m.provider === "Grok").map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
+                              <div className="flex items-center justify-between w-full gap-6">
+                                <div className="flex items-center gap-2">
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
+                                  <span>{opt.label}</span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3F4F6] dark:bg-[#1F2937] text-[#6B7280] dark:text-[#9CA3AF]">{opt.badge}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                          <div className="px-2 pt-3 pb-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">Jasper AI</p>
+                          </div>
+                          {MODEL_OPTIONS.filter(m => m.provider === "Jasper AI").map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
+                              <div className="flex items-center justify-between w-full gap-6">
+                                <div className="flex items-center gap-2">
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
+                                  <span>{opt.label}</span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#F3F4F6] dark:bg-[#1F2937] text-[#6B7280] dark:text-[#9CA3AF]">{opt.badge}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+
+                          <div className="px-2 pt-3 pb-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#22C55E]">🌪️ OpenRouter (Cost-Cutting)</p>
+                          </div>
+                          {MODEL_OPTIONS.filter(m => m.provider === "OpenRouter").map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
+                              <div className="flex items-center justify-between w-full gap-6">
+                                <div className="flex items-center gap-2">
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
+                                  <span>{opt.label}</span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#D1FAE5] dark:bg-[#064E3B] text-[#047857] dark:text-[#34D399]">{opt.badge}</span>
                               </div>
                             </SelectItem>
                           ))}
@@ -500,25 +823,19 @@ export default function AIAgentsPage() {
                       </Select>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label className={labelClass}>Sales Pipeline</Label>
-                      <Select value={pipeline} onValueChange={setPipeline}>
-                        <SelectTrigger className={selectTriggerClass}>
-                          <div className="flex items-center gap-2 overflow-hidden">
-                            <span className="truncate text-sm">{PIPELINE_OPTIONS.find(p => p.value === pipeline)?.label ?? pipeline}</span>
-                          </div>
-                        </SelectTrigger>
-                        <SelectContent className={selectContentClass}>
-                          {PIPELINE_OPTIONS.map(opt => (
-                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="space-y-1.5">
+                    <Label className={labelClass}>Targeted Phone Number</Label>
+                    <Select value={phoneNumber} onValueChange={setPhoneNumber}>
+                      <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
+                      <SelectContent className={selectContentClass}>
+                        {availableNumbers.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-[#6B7280] dark:text-[#9CA3AF] mt-0.5">
+                      Direct this AI Agent to reply only when messages are received on this specific phone number.
+                    </p>
                   </div>
 
                   <div className="space-y-1.5">
@@ -636,6 +953,21 @@ export default function AIAgentsPage() {
                                               className={`${innerFieldClass} h-8 text-xs`}
                                             />
 
+                                            {/* Existing Asset Reference */}
+                                            {source.type === "existing_asset" && (
+                                              <div className="flex items-center gap-3 p-3 bg-[#22C55E]/5 border border-[#22C55E]/20 rounded-xl">
+                                                <Database className="w-5 h-5 text-[#22C55E] shrink-0" />
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="text-xs font-bold text-[#111827] dark:text-[#F9FAFB] truncate">
+                                                    {globalKbItems.find(a => a.id === source.assetId)?.title || source.label || "Linked Asset"}
+                                                  </p>
+                                                  <p className="text-[10px] text-[#6B7280] dark:text-[#9CA3AF] font-medium">
+                                                    Asset ID: {source.assetId}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            )}
+
                                             {/* Business Context */}
                                             {source.type === "business_context" && (
                                               <Textarea
@@ -649,20 +981,55 @@ export default function AIAgentsPage() {
 
                                             {/* Website URL */}
                                             {source.type === "website_url" && (
-                                              <div className="flex gap-2">
-                                                <Input
-                                                  placeholder="https://yourwebsite.com/about"
-                                                  value={source.url ?? ""}
-                                                  onChange={e => updateKbSource(source.id, { url: e.target.value })}
-                                                  className={`${innerFieldClass} h-9 text-xs flex-1`}
-                                                />
-                                                <Button
-                                                  type="button"
-                                                  size="sm"
-                                                  className="h-9 px-3 bg-[#22C55E]/10 text-[#22C55E] hover:bg-[#22C55E]/20 font-bold text-xs rounded-lg shrink-0"
-                                                >
-                                                  <Globe className="w-3.5 h-3.5 mr-1.5" /> Scrape
-                                                </Button>
+                                              <div className="space-y-3">
+                                                {(!source.scrapingStatus || source.scrapingStatus === "idle") ? (
+                                                  <div className="flex gap-2">
+                                                    <Input
+                                                      placeholder="https://yourwebsite.com/about"
+                                                      value={source.url ?? ""}
+                                                      onChange={e => updateKbSource(source.id, { url: e.target.value })}
+                                                      className={`${innerFieldClass} h-9 text-xs flex-1`}
+                                                    />
+                                                    <Button
+                                                      type="button"
+                                                      size="sm"
+                                                      onClick={() => handleScrapeWebsite(source.id, source.url ?? "", source.label ?? "")}
+                                                      className="h-9 px-3 bg-[#22C55E]/10 text-[#22C55E] hover:bg-[#22C55E]/20 font-bold text-xs rounded-lg shrink-0"
+                                                    >
+                                                      <Globe className="w-3.5 h-3.5 mr-1.5" /> Scrape
+                                                    </Button>
+                                                  </div>
+                                                ) : source.scrapingStatus === "failed" ? (
+                                                  <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 rounded-xl p-4 space-y-3">
+                                                    <p className="text-xs font-semibold text-red-600 dark:text-red-400">
+                                                      {getSourceScrapeProgressMessage(source.scrapingStatus, source.scrapingProgress, source.scrapingError)}
+                                                    </p>
+                                                    <Button
+                                                      type="button"
+                                                      size="sm"
+                                                      onClick={() => updateKbSource(source.id, { scrapingStatus: "idle", scrapingProgress: 0, scrapingError: "" })}
+                                                      className="h-8 px-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-bold text-xs rounded-lg animate-pulse"
+                                                    >
+                                                      Retry Scraping
+                                                    </Button>
+                                                  </div>
+                                                ) : (
+                                                  <div className="bg-[#F9FAFB] dark:bg-[#0B0F1A] border border-[#E5E7EB] dark:border-[#1F2937] rounded-xl p-4 space-y-3">
+                                                    <div className="flex items-center justify-between text-[10px] font-bold text-[#111827] dark:text-[#F9FAFB] uppercase tracking-wider">
+                                                      <span>Scraping Website...</span>
+                                                      <Loader2 className="w-3.5 h-3.5 text-[#22C55E] animate-spin" />
+                                                    </div>
+                                                    <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2 overflow-hidden">
+                                                      <div 
+                                                        className="bg-[#22C55E] h-2 rounded-full transition-all duration-500 ease-out" 
+                                                        style={{ width: `${source.scrapingProgress ?? 0}%` }}
+                                                      />
+                                                    </div>
+                                                    <p className="text-[10px] font-semibold text-[#6B7280] dark:text-[#9CA3AF]">
+                                                      {getSourceScrapeProgressMessage(source.scrapingStatus, source.scrapingProgress)}
+                                                    </p>
+                                                  </div>
+                                                )}
                                               </div>
                                             )}
 
@@ -727,12 +1094,15 @@ export default function AIAgentsPage() {
 
                           {/* Add new source row */}
                           <div className="flex gap-2">
-                            <Select value={addKbType} onValueChange={v => setAddKbType(v as KbSourceType)}>
+                            <Select value={addKbType} onValueChange={v => setAddKbType(v)}>
                               <SelectTrigger className="flex-1 h-9 bg-[#F9FAFB] dark:bg-[#0B0F1A] border-[#E5E7EB] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB] rounded-xl text-xs">
-                                <SelectValue placeholder="Select knowledge source type…" />
+                                <SelectValue placeholder="Add source or select existing asset…" />
                               </SelectTrigger>
                               <SelectContent className={selectContentClass}>
-                                {KB_SOURCE_TYPES.map(t => {
+                                <div className="px-2 pt-2 pb-1">
+                                  <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">Create Manual Source</p>
+                                </div>
+                                {KB_SOURCE_TYPES.filter(t => t.type !== "existing_asset").map(t => {
                                   const Icon = t.icon;
                                   return (
                                     <SelectItem key={t.type} value={t.type} className={selectItemClass}>
@@ -746,6 +1116,24 @@ export default function AIAgentsPage() {
                                     </SelectItem>
                                   );
                                 })}
+                                {globalKbItems.length > 0 && (
+                                  <>
+                                    <div className="px-2 pt-3 pb-1 border-t border-[#E5E7EB] dark:border-[#1F2937] mt-1">
+                                      <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">Link Existing Knowledge</p>
+                                    </div>
+                                    {globalKbItems.map(asset => (
+                                      <SelectItem key={asset.id} value={`asset:${asset.id}`} className={selectItemClass}>
+                                        <div className="flex items-center gap-2.5">
+                                          <Database className="w-3.5 h-3.5 shrink-0 text-[#22C55E]" />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-bold truncate">{asset.title}</p>
+                                            <p className="text-[9px] text-[#9CA3AF] uppercase">{asset.type}</p>
+                                          </div>
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </>
+                                )}
                               </SelectContent>
                             </Select>
                             <Button
@@ -784,15 +1172,22 @@ export default function AIAgentsPage() {
                     <span className="text-sm">Loading agents…</span>
                   </div>
                 ) : loadError ? (
-                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-                    <AlertCircle className="w-8 h-8 text-red-400" />
-                    <p className="text-sm text-[#6B7280] dark:text-[#9CA3AF] max-w-xs">{loadError}</p>
+                  <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+                    <div className="w-16 h-16 bg-red-50 dark:bg-red-900/10 rounded-2xl flex items-center justify-center">
+                      <AlertCircle className="w-8 h-8 text-red-500" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-base font-bold text-[#111827] dark:text-[#F9FAFB]">{loadError}</p>
+                      <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF] max-w-[280px] mx-auto leading-relaxed">
+                        Please check your connection or ensure the service is active.
+                      </p>
+                    </div>
                     <Button
-                      variant="outline" size="sm"
-                      className="rounded-xl border-[#E5E7EB] dark:border-[#374151] bg-white dark:bg-[#1F2937] text-[#111827] dark:text-[#F9FAFB] hover:bg-[#F9FAFB] dark:hover:bg-[#374151]"
+                      variant="outline"
+                      className="mt-2 rounded-xl border-[#E5E7EB] dark:border-[#1F2937] bg-white dark:bg-[#111827] text-[#111827] dark:text-[#F9FAFB] hover:bg-[#F9FAFB] dark:hover:bg-[#0B0F1A] px-8 h-11 font-bold shadow-sm transition-all active:scale-95"
                       onClick={loadAgents}
                     >
-                      <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Retry
+                      <RefreshCw className="w-4 h-4 mr-2" /> Try Again
                     </Button>
                   </div>
                 ) : agents.length === 0 ? (
@@ -836,8 +1231,8 @@ export default function AIAgentsPage() {
 
                            {agent.model && (
                             <div className="flex items-center gap-1.5 mb-3">
-                              {MODEL_OPTIONS.find(m => m.value === agent.model)?.emoji ? (
-                                <span className="text-sm shrink-0">{MODEL_OPTIONS.find(m => m.value === agent.model)?.emoji}</span>
+                               {MODEL_OPTIONS.find(m => m.value === agent.model)?.logo ? (
+                                 <img src={MODEL_OPTIONS.find(m => m.value === agent.model)?.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />
                               ) : (
                                 <Cpu className="w-3 h-3 text-[#6B7280] dark:text-[#9CA3AF]" />
                               )}
@@ -892,7 +1287,7 @@ export default function AIAgentsPage() {
                               className="h-8 w-8 p-0 text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#22C55E] rounded-xl hover:bg-[#22C55E]/10">
                               <Edit3 className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteAgent(agent.id)}
+                            <Button variant="ghost" size="sm" onClick={() => setDeletingAgent(agent)}
                               className="h-8 w-8 p-0 text-[#6B7280] dark:text-[#9CA3AF] hover:text-red-500 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/10">
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -1022,6 +1417,20 @@ export default function AIAgentsPage() {
           </div>
         </div>
       </div>
+
+      {deletingAgent && (
+        <ConfirmDeleteDialog
+          open={!!deletingAgent}
+          onOpenChange={(open) => !open && setDeletingAgent(null)}
+          title={`Delete AI Agent "${deletingAgent.name}"?`}
+          description="This will permanently delete this AI agent and its configuration. This agent will no longer be available to handle any automated chats."
+          onConfirm={async () => {
+            await handleDeleteAgent(deletingAgent.id);
+            setDeletingAgent(null);
+          }}
+          trigger={<span className="hidden" />}
+        />
+      )}
     </div>
   );
 }
