@@ -459,6 +459,7 @@ async function runAiAutoReply(
     }
   }
 
+  try {
     const { data: aiMsg, error: outboundErr } = await supabase
       .from('messages')
       .insert({
