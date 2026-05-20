@@ -37,6 +37,7 @@ type SettingsConfig = {
   support_email: string;
   full_name: string;
   personal_email: string;
+  avatar_url?: string | null;
   tenant_id?: string;
   active_subscription: {
     subscription_status: string;
@@ -414,7 +415,7 @@ function SettingsPageContent() {
         const endorselyReferral = typeof window !== 'undefined' ? localStorage.getItem("endorsely_referral") || "" : "";
 
         // Register checkout event callback to immediately forward affiliate details to our API
-        paddleInstance.on('checkout.completed', async (data: any) => {
+        (paddleInstance as any).on('checkout.completed', async (data: any) => {
           console.log("🔔 [Paddle Checkout Client] Completion event captured:", data);
           const refId = typeof window !== 'undefined' ? localStorage.getItem("endorsely_referral") || "" : "";
           if (refId) {

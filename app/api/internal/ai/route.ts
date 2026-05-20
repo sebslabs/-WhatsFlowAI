@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     let resolvedSourceIds = knowledgeSourceIds as string[] | null | undefined;
     if (agentId && resolvedSourceIds === undefined) {
       const admin = getSupabaseAdmin();
-      const { data: agent } = await admin
+      const { data: agent } = await (admin as any)
         .from('ai_agents')
         .select('metadata')
         .eq('id', agentId)

@@ -12,7 +12,7 @@ export async function initiateHumanHandoff(
   leadId?: string
 ): Promise<boolean> {
   try {
-    const admin = getSupabaseAdmin()
+    const admin = getSupabaseAdmin() as any
     const { data: convRow } = await admin
       .from('conversations')
       .select('id')

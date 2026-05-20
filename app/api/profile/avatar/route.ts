@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         });
       }
     } catch (err) {
-      logger.error('Failed ensuring avatars bucket exists via admin:', err);
+      logger.error({ error: err }, 'Failed ensuring avatars bucket exists via admin');
     }
 
     // Enforce user isolation in path: `user_id/avatar-timestamp.ext`
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     const publicUrl = publicUrlData.publicUrl;
 
     // Update profiles table with the new avatar URL
-    const { error: profileUpdateErr } = await supabaseAdmin
+    const { error: profileUpdateErr } = await (supabaseAdmin as any)
       .from('profiles')
       .update({ avatar_url: publicUrl })
       .eq('id', user.id);
@@ -131,7 +131,7 @@ export async function DELETE(request: NextRequest) {
     const bucketName = 'avatars';
 
     // 1. Fetch current profile to get the avatar_url and delete the physical file
-    const { data: profile, error: fetchErr } = await supabaseAdmin
+    const { data: profile, error: fetchErr } = await (supabaseAdmin as any)
       .from('profiles')
       .select('avatar_url')
       .eq('id', user.id)
@@ -158,7 +158,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 2. Set the avatar_url in the profiles table to NULL
-    const { error: profileUpdateErr } = await supabaseAdmin
+    const { error: profileUpdateErr } = await (supabaseAdmin as any)
       .from('profiles')
       .update({ avatar_url: null })
       .eq('id', user.id);

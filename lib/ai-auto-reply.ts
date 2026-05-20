@@ -24,7 +24,7 @@ export interface TriggerAiAutoReplyInput {
 }
 
 async function fetchActiveAgent(tenantId: string, conversationId: string) {
-  const admin = getSupabaseAdmin()
+  const admin = getSupabaseAdmin() as any
   const { data: conv } = await admin
     .from('conversations')
     .select('metadata')
@@ -53,13 +53,13 @@ async function fetchActiveAgent(tenantId: string, conversationId: string) {
 
   if (!agents?.length) return null
   return (
-    agents.find((a) => String((a.metadata as Record<string, string>)?.phone_number || 'all') === 'all') ||
+    agents.find((a: any) => String((a.metadata as Record<string, string>)?.phone_number || 'all') === 'all') ||
     agents[0]
   )
 }
 
 async function workerAlreadyReplied(conversationId: string, afterMessageId: string): Promise<boolean> {
-  const admin = getSupabaseAdmin()
+  const admin = getSupabaseAdmin() as any
   const { data: rows } = await admin
     .from('messages')
     .select('id, sender_type')
@@ -69,14 +69,14 @@ async function workerAlreadyReplied(conversationId: string, afterMessageId: stri
 
   if (!rows?.length) return false
 
-  const userIdx = rows.findIndex((r) => r.id === afterMessageId)
-  if (userIdx < 0) return rows.some((r) => r.sender_type === 'ai')
+  const userIdx = rows.findIndex((r: any) => r.id === afterMessageId)
+  if (userIdx < 0) return rows.some((r: any) => r.sender_type === 'ai')
 
-  return rows.slice(0, userIdx).some((r) => r.sender_type === 'ai')
+  return rows.slice(0, userIdx).some((r: any) => r.sender_type === 'ai')
 }
 
 async function isAiAllowedForLead(tenantId: string, contactId: string): Promise<{ ok: boolean; leadId?: string }> {
-  const admin = getSupabaseAdmin()
+  const admin = getSupabaseAdmin() as any
   const { data: lead } = await admin
     .from('leads')
     .select('id, ai_active')
@@ -116,7 +116,7 @@ export async function runAiAutoReply(input: TriggerAiAutoReplyInput): Promise<vo
   const { tenantId, conversationId, contactId, inboundText, userMessageId, sessionId, sendJid, rawJid, phone } =
     input
 
-  const admin = getSupabaseAdmin()
+  const admin = getSupabaseAdmin() as any
 
   const { data: conv } = await admin
     .from('conversations')
@@ -153,7 +153,7 @@ export async function runAiAutoReply(input: TriggerAiAutoReplyInput): Promise<vo
     .order('created_at', { ascending: true })
     .limit(14)
 
-  const history = (historyMsgs ?? []).map((m) => ({
+  const history = (historyMsgs ?? []).map((m: any) => ({
     role: (m.sender_type === 'user' || m.sender_type === 'customer'
       ? 'user'
       : 'assistant') as 'user' | 'assistant',

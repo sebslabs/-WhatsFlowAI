@@ -20,7 +20,7 @@ function baseTitle(title: string): string {
 export async function expandKnowledgeIds(tenantId: string, rootIds: string[]): Promise<string[]> {
   if (!rootIds.length) return []
 
-  const admin = getSupabaseAdmin()
+  const admin = getSupabaseAdmin() as any
   const expanded = new Set<string>(rootIds)
 
   const { data: roots } = await admin
@@ -38,7 +38,7 @@ export async function expandKnowledgeIds(tenantId: string, rootIds: string[]): P
         .select('id')
         .eq('tenant_id', tenantId)
         .filter('metadata->>document_id', 'eq', docId)
-      byDoc?.forEach((r) => expanded.add(r.id))
+      byDoc?.forEach((r: any) => expanded.add(r.id))
     }
 
     const stem = baseTitle(root.title || '')
@@ -48,7 +48,7 @@ export async function expandKnowledgeIds(tenantId: string, rootIds: string[]): P
         .select('id, title')
         .eq('tenant_id', tenantId)
         .ilike('title', `${stem}%`)
-      byTitle?.forEach((r) => expanded.add(r.id))
+      byTitle?.forEach((r: any) => expanded.add(r.id))
     }
   }
 
@@ -69,14 +69,14 @@ export async function resolveAllowedKnowledgeIds(
 
   const expanded = new Set(await expandKnowledgeIds(tenantId, linkedIds))
 
-  const admin = getSupabaseAdmin()
+  const admin = getSupabaseAdmin() as any
   const { data: agentRows } = await admin
     .from('knowledge_base')
     .select('id')
     .eq('tenant_id', tenantId)
     .filter('metadata->>agent_id', 'eq', agentId)
 
-  agentRows?.forEach((r) => expanded.add(r.id))
+  agentRows?.forEach((r: any) => expanded.add(r.id))
 
   if (expanded.size === 0) return null
   return [...expanded]
@@ -90,7 +90,7 @@ async function upsertAgentChunk(
   content: string,
   sourceType: string
 ): Promise<void> {
-  const admin = getSupabaseAdmin()
+  const admin = getSupabaseAdmin() as any
   const embedding = await generateEmbedding(content)
 
   const { data: existing } = await admin

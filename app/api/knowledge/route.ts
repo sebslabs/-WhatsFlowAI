@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
                   const contentMatch = m.match(/\(([^)]*)\)/);
                   if (contentMatch && contentMatch[1]) {
                     const cleanText = contentMatch[1]
-                      .replace(/\\([0-7]{3})/g, (_, octal) => String.fromCharCode(parseInt(octal, 8)))
+                      .replace(/\\([0-7]{3})/g, (_: string, octal: string) => String.fromCharCode(parseInt(octal, 8)))
                       .replace(/\\(.)/g, '$1');
                     parsedText += cleanText + ' ';
                   }
@@ -214,8 +214,8 @@ export async function POST(request: NextRequest) {
       const chunkTitle = chunks.length > 1 ? `${title} (Part ${i + 1})` : title;
       const embedding = await generateEmbedding(chunkTextSegment);
 
-      const { data, error: dbError } = await supabase
-        .from('knowledge_base')
+      const { data, error: dbError } = await (supabase
+        .from('knowledge_base') as any)
         .insert({
           tenant_id: user.tenant_id,
           title: chunkTitle,

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
+import crypto from 'crypto';
 // MEDIUM FIX (#9): Import shared HMAC verifier — same function used in tests.
 // Eliminates duplicate logic that could silently diverge between test and production.
 import { verifyWebhookHmac } from '@/lib/utils/webhook-hmac';

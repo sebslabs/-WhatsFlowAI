@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
           fileSizeLimit: MAX_FILE_SIZE_BYTES,
         });
       }
-    } catch (err) {
-      logger.warn('Failed ensuring bucket exists:', err);
+    } catch (err: any) {
+      logger.warn('Failed ensuring bucket exists: ' + String(err));
     }
 
     // Namespace by tenant to enforce tenant isolation in storage
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       .createSignedUrl(fileName, 3600); // 1-hour expiry
 
     if (signedUrlErr || !signedUrlData?.signedUrl) {
-      logger.error('Failed to generate signed URL for uploaded file', signedUrlErr);
+      logger.error({ err: signedUrlErr }, 'Failed to generate signed URL for uploaded file');
       throw signedUrlErr ?? new Error('Signed URL generation failed');
     }
 
