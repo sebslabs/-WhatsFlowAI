@@ -8,7 +8,7 @@ const nextConfig = {
     ignoreDuringBuilds: false,
   },
   experimental: {
-    instrumentationHook: true,
+    instrumentationHook: false,
     serverComponentsExternalPackages: ['@whiskeysockets/baileys', 'ws', 'bullmq', 'ioredis'],
   },
 };
