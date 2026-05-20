@@ -31,11 +31,11 @@ export interface OpenRouterMessage {
 export interface OpenRouterCompletionOptions {
   model: string;
   messages: OpenRouterMessage[];
-  maxTokens?: number;
-  temperature?: number;
-  responseFormat?: { type: 'json_object' };
+  maxTokens?: number | undefined;
+  temperature?: number | undefined;
+  responseFormat?: { type: 'json_object' } | undefined;
   tenantId: string;
-  leadId?: string;
+  leadId?: string | undefined;
 }
 
 export interface TokenUsage {
@@ -54,7 +54,7 @@ export interface OpenRouterResponse {
 
 export interface BudgetStatus {
   allowed: boolean;
-  reason?: 'token_limit_exceeded' | 'cost_limit_exceeded';
+  reason?: 'token_limit_exceeded' | 'cost_limit_exceeded' | undefined;
   tokensUsedToday: number;
   tokenLimit: number;
   costUsedToday: number;
@@ -64,9 +64,9 @@ export interface BudgetStatus {
 export interface GuardrailResult {
   allowed: boolean;
   action: 'process' | 'block' | 'human_handoff';
-  classification?: ThreatClassification;
-  sanitizedContent?: string;
-  reason?: string;
+  classification?: ThreatClassification | undefined;
+  sanitizedContent?: string | undefined;
+  reason?: string | undefined;
 }
 
 export interface AISecurityLog {
@@ -81,5 +81,5 @@ export interface AISecurityLog {
   cost: number;
   rawInputPreview: string;
   actionTaken: 'process' | 'block' | 'handoff';
-  createdAt?: string;
+  createdAt?: string | undefined;
 }

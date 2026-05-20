@@ -64,19 +64,19 @@ export class ContentCleaner {
       h6: [] as string[],
     };
 
-    $('h1').each((_, el) => { const txt = $(el).text().trim(); if (txt) headings.h1.push(txt); });
-    $('h2').each((_, el) => { const txt = $(el).text().trim(); if (txt) headings.h2.push(txt); });
-    $('h3').each((_, el) => { const txt = $(el).text().trim(); if (txt) headings.h3.push(txt); });
-    $('h4').each((_, el) => { const txt = $(el).text().trim(); if (txt) headings.h4.push(txt); });
-    $('h5').each((_, el) => { const txt = $(el).text().trim(); if (txt) headings.h5.push(txt); });
-    $('h6').each((_, el) => { const txt = $(el).text().trim(); if (txt) headings.h6.push(txt); });
+    $('h1').each((_: any, el: any) => { const txt = $(el).text().trim(); if (txt) headings.h1.push(txt); });
+    $('h2').each((_: any, el: any) => { const txt = $(el).text().trim(); if (txt) headings.h2.push(txt); });
+    $('h3').each((_: any, el: any) => { const txt = $(el).text().trim(); if (txt) headings.h3.push(txt); });
+    $('h4').each((_: any, el: any) => { const txt = $(el).text().trim(); if (txt) headings.h4.push(txt); });
+    $('h5').each((_: any, el: any) => { const txt = $(el).text().trim(); if (txt) headings.h5.push(txt); });
+    $('h6').each((_: any, el: any) => { const txt = $(el).text().trim(); if (txt) headings.h6.push(txt); });
 
     // 4. Anchor link parsing
     const socialLinks: string[] = [];
     const internalLinks: string[] = [];
     const baseUrl = new URL(url);
 
-    $('a').each((_, el) => {
+    $('a').each((_, el: any) => {
       const href = $(el).attr('href')?.trim();
       if (!href) return;
 
@@ -104,7 +104,7 @@ export class ContentCleaner {
 
     // 5. Plain paragraphs and text body
     const paragraphs: string[] = [];
-    $('p').each((_, el) => {
+    $('p').each((_, el: any) => {
       const txt = $(el).text().replace(/\s+/g, ' ').trim();
       if (txt && txt.length > 15) { // Skip short noise paragraphs
         paragraphs.push(txt);
@@ -113,10 +113,10 @@ export class ContentCleaner {
 
     // 6. Contact Information (Emails + Phone numbers matching via regex)
     const rawText = $.text();
-    const emails = Array.from(new Set(rawText.match(this.EMAIL_REGEX) || []));
+    const emails = Array.from(new Set(rawText.match(this.EMAIL_REGEX) || [])) as string[];
     const phones = Array.from(new Set(rawText.match(this.PHONE_REGEX) || []))
-      .map(p => p.trim())
-      .filter(p => p.length >= 7); // Exclude small stray integers
+      .map((p: any) => String(p).trim())
+      .filter((p: string) => p.length >= 7) as string[];
 
     // 7. Formulate Clean Markdown Outline representation
     const markdownLines: string[] = [];
@@ -128,7 +128,7 @@ export class ContentCleaner {
 
     // Traverse body elements recursively to build structured markdown text
     const self = this;
-    $('body *').each((_, el) => {
+    $('body *').each((_, el: any) => {
       const tag = el.tagName.toLowerCase();
       const $el = $(el);
 
@@ -146,7 +146,7 @@ export class ContentCleaner {
           markdownLines.push(`${text}\n`);
         }
       } else if (tag === 'ul' || tag === 'ol') {
-        $el.find('li').each((i, li) => {
+        $el.find('li').each((i: any, li: any) => {
           const liText = $(li).text().trim();
           if (liText) {
             markdownLines.push(tag === 'ul' ? `- ${liText}` : `${i + 1}. ${liText}`);

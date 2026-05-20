@@ -19,13 +19,14 @@ let _lastGatewayMeta: GatewayMeta | null = null;
 async function callInternalAI(payload: {
   message: string;
   systemPrompt: string;
-  history?: { role: 'user' | 'assistant'; content: string }[];
-  model?: string;
+  history?: { role: 'user' | 'assistant'; content: string }[] | undefined;
+  model?: string | undefined;
   tenantId: string;
-  userId?: string;
-  agentId?: string;
-  handoffContext?: { contactId: string; leadId?: string };
-}): Promise<{ success: boolean; text: string; error?: string }> {
+  userId?: string | undefined;
+  agentId?: string | undefined;
+  handoffContext?: { contactId: string; leadId?: string | undefined } | undefined;
+  conversationId?: string | undefined;
+}): Promise<{ success: boolean; text: string; error?: string | undefined }> {
   try {
     if (!INTERNAL_API_KEY) {
       throw new Error('INTERNAL_API_KEY is not configured in backend environment');
@@ -161,9 +162,9 @@ export class AIService {
     history:      { role: 'user' | 'assistant'; content: string }[] = [],
     modelStr:     string = 'mistral-large-latest',
     tenantId:     string = '00000000-0000-0000-0000-000000000000',
-    agentId?:     string,
-    handoffContext?: { contactId: string; leadId?: string },
-    conversationId?: string
+    agentId?:     string | undefined,
+    handoffContext?: { contactId: string; leadId?: string | undefined } | undefined,
+    conversationId?: string | undefined
   ): Promise<string> {
     const useOr = !!(process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY.length > 10);
     const routedModel = useOr && !modelStr.startsWith('openrouter/')

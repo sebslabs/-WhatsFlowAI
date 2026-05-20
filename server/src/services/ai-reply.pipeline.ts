@@ -24,7 +24,7 @@ export interface AiReplyPipelineInput {
   tenantId: string;
   contactId: string;
   conversationId: string;
-  leadId?: string;
+  leadId?: string | undefined;
   message: string;
   agent: ActiveAgentRecord;
   history: { role: 'user' | 'assistant'; content: string }[];
@@ -33,10 +33,10 @@ export interface AiReplyPipelineInput {
 export interface AiReplyPipelineResult {
   replied: boolean;
   handoff: boolean;
-  replyText?: string;
-  model?: string;
-  totalTokens?: number;
-  blockReason?: string;
+  replyText?: string | undefined;
+  model?: string | undefined;
+  totalTokens?: number | undefined;
+  blockReason?: string | undefined;
 }
 
 function buildAgentSystemPrompt(agent: ActiveAgentRecord): string {

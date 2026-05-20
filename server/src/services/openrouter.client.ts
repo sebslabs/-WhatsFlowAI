@@ -20,7 +20,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
 };
 
 function calculateCost(model: string, usage: TokenUsage): number {
-  const price = MODEL_PRICING[model] || MODEL_PRICING['default'];
+  const price = (MODEL_PRICING[model] || MODEL_PRICING['default'])!;
   const inputCost = (usage.promptTokens / 1_000_000) * price.input;
   const outputCost = (usage.completionTokens / 1_000_000) * price.output;
   return Number((inputCost + outputCost).toFixed(6));
