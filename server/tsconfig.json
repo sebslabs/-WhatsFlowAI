@@ -9,7 +9,7 @@
     "module": "nodenext",
     "target": "esnext",
     "downlevelIteration": true,
-    "ignoreDeprecations": "5.0",
+    "ignoreDeprecations": "6.0",
     "types": ["node"],
     // For nodejs:
     // "lib": ["esnext"],
