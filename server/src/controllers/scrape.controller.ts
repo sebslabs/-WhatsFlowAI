@@ -103,7 +103,7 @@ export class ScrapeController {
       });
     } catch (err: any) {
       if (err instanceof z.ZodError) {
-        res.status(400).json({ error: err.errors[0]?.message || 'Invalid input data.' });
+        res.status(400).json({ error: err.issues[0]?.message || 'Invalid input data.' });
         return;
       }
       logger.error('[ScrapeController] Exception triggering website scrape', { error: err.message });

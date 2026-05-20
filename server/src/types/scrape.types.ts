@@ -20,7 +20,7 @@ export interface StructuredScrapeData {
   phones: string[];
   socialLinks: string[];
   internalLinks: string[];
-  businessDescription?: string;
+  businessDescription?: string | undefined;
   cleanMarkdown: string;
 }
 
@@ -36,7 +36,7 @@ export interface ScrapeJobData {
   jobId: string;
   tenantId: string;
   url: string;
-  label?: string;
+  label?: string | undefined;
 }
 
 export interface AIFaqResponse {
