@@ -1,4 +1,28 @@
-import { describe, it, expect, vi } from 'vitest';
+import { vi } from 'vitest';
+
+vi.hoisted(() => {
+  process.env.OPENAI_API_KEY = 'mock-openai-key';
+});
+
+import { describe, it, expect } from 'vitest';
+
+vi.mock('openai', () => {
+  const MockOpenAI = vi.fn().mockImplementation(() => ({
+    chat: {
+      completions: {
+        create: vi.fn().mockResolvedValue({ choices: [] }),
+      },
+    },
+    embeddings: {
+      create: vi.fn().mockResolvedValue({ data: [] }),
+    },
+  }));
+  return {
+    default: MockOpenAI,
+    OpenAI: MockOpenAI,
+  };
+});
+
 import { FlowService } from '@/server/src/services/flow.service';
 
 describe('Chatbot Flow Engine', () => {

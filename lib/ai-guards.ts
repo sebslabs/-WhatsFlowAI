@@ -75,11 +75,11 @@ const RESPONSE_BLOCKLIST: RegExp[] = [
  *   - HTML entity decoding catches encoded payloads
  */
 function normalizeInput(raw: string): string {
-  // NFC normalization: collapses visually identical Unicode variants
-  const nfc = raw.normalize('NFC')
+  // NFKC normalization: collapses compatibility/fullwidth Unicode variants
+  const nfkc = raw.normalize('NFKC')
 
   // Decode common HTML entities that could mask injection patterns
-  return nfc
+  return nfkc
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')

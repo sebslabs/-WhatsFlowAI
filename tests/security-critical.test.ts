@@ -7,11 +7,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
+// ─── Top-level mocks for hoisting safety ────────────────────────────────────
+const mockRequireAdminApi = vi.fn();
+const mockCreateClient = vi.fn();
+
+vi.mock('@/lib/auth', () => ({
+  requireAdminApi: (...args: any[]) => mockRequireAdminApi(...args),
+}));
+
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: (...args: any[]) => mockCreateClient(...args),
+}));
+
 // ─── Fix #1a: /api/diagnostic returns 404 in production ────────────────────
 
 describe('CRITICAL Fix #1a — /api/diagnostic disabled in production', () => {
   beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://mock-supabase.url');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'mock-service-key');
     vi.resetModules();
+    mockRequireAdminApi.mockReset();
+    mockCreateClient.mockReset();
   });
 
   afterEach(() => {
@@ -33,14 +49,12 @@ describe('CRITICAL Fix #1a — /api/diagnostic disabled in production', () => {
   it('should NOT expose cross-tenant data — requires admin auth in development', async () => {
     vi.stubEnv('NODE_ENV', 'development');
 
-    // Mock requireAdminApi to simulate unauthenticated request
-    vi.mock('@/lib/auth', () => ({
-      requireAdminApi: vi.fn().mockResolvedValue({
-        user: null,
-        supabase: null,
-        error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
-      }),
-    }));
+    // Set mock value dynamically in the test block safely
+    mockRequireAdminApi.mockResolvedValue({
+      user: null,
+      supabase: null,
+      error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+    });
 
     const { GET } = await import('../app/api/diagnostic/route');
     const req = new NextRequest('http://localhost:3000/api/diagnostic');
@@ -66,15 +80,14 @@ describe('CRITICAL Fix #1b — /api/diagnostic/messages permanently disabled', (
   });
 
   it('should NOT perform any database mutations (no Supabase client instantiated)', async () => {
-    const createClientSpy = vi.fn();
-    vi.mock('@supabase/supabase-js', () => ({ createClient: createClientSpy }));
+    mockCreateClient.mockClear();
 
     vi.resetModules();
     const { GET } = await import('../app/api/diagnostic/messages/route');
     await GET();
 
     // Supabase client must never be instantiated — no DB calls on a disabled endpoint
-    expect(createClientSpy).not.toHaveBeenCalled();
+    expect(mockCreateClient).not.toHaveBeenCalled();
   });
 });
 

@@ -7,14 +7,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // ─── Fix #1/#2: Rate Limiter Fail-Closed Behavior ────────────────────────────
 
 describe('MEDIUM Fix #1/#2 — Rate limiter fail-closed in production', () => {
-  const originalEnv = process.env.NODE_ENV
-
   afterEach(() => {
-    Object.defineProperty(process.env, 'NODE_ENV', { value: originalEnv, writable: true })
+    vi.unstubAllEnvs()
   })
 
   it('should fail-closed (503) in production when Redis is unavailable', async () => {
-    Object.defineProperty(process.env, 'NODE_ENV', { value: 'production', writable: true })
+    vi.stubEnv('NODE_ENV', 'production')
     delete process.env.UPSTASH_REDIS_REST_URL
     delete process.env.UPSTASH_REDIS_REST_TOKEN
 
@@ -28,7 +26,7 @@ describe('MEDIUM Fix #1/#2 — Rate limiter fail-closed in production', () => {
   })
 
   it('should fail-open in development when Redis is unavailable', () => {
-    Object.defineProperty(process.env, 'NODE_ENV', { value: 'development', writable: true })
+    vi.stubEnv('NODE_ENV', 'development')
     delete process.env.UPSTASH_REDIS_REST_URL
 
     const isProduction = process.env.NODE_ENV === 'production'
@@ -63,7 +61,7 @@ describe('MEDIUM Fix #1/#2 — Rate limiter fail-closed in production', () => {
   })
 
   it('should block traffic on Redis error in production (not fail-open)', () => {
-    Object.defineProperty(process.env, 'NODE_ENV', { value: 'production', writable: true })
+    vi.stubEnv('NODE_ENV', 'production')
 
     // Simulate: Redis call throws an error
     const shouldBlock = process.env.NODE_ENV === 'production'

@@ -3,6 +3,19 @@ import { createClient } from '@supabase/supabase-js';
 import { config } from '@/lib/config';
 
 export async function GET(request: NextRequest) {
+  // CRITICAL: Disable in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not Found' }, { status: 404 });
+  }
+
+  // In development: require admin auth
+  const { requireAdminApi } = await import('@/lib/auth');
+  const auth = await requireAdminApi(request);
+  
+  if (auth.error) {
+    return auth.error;
+  }
+
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
