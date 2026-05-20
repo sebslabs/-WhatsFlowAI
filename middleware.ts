@@ -1,3 +1,10 @@
+// Edge Runtime compatibility polyfill for process global
+if (typeof globalThis.process === 'undefined') {
+  (globalThis as any).process = { env: {} };
+} else if (typeof (globalThis.process as any).version === 'undefined') {
+  (globalThis.process as any).version = 'v18.0.0';
+}
+
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import {
