@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
         })
         .select('id')
-        .single();
+        .single() as any;
 
       if (dbError) {
         logger.error({ dbError }, '[knowledge] Chunk insertion failed');
