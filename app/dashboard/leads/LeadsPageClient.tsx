@@ -5,12 +5,14 @@ import { useSearchParams, useRouter } from "next/navigation";
 import {
   Search, Plus, Download, LayoutList, Columns3,
   Phone, MessageCircle, MoreHorizontal, Edit3, Trash2, Eye,
-  Clock, Zap, User, ArrowRight,
+  Clock, Zap, User, ArrowRight, Upload, Settings2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddLeadModal } from "@/components/dashboard/leads/AddLeadModal";
+import { ImportLeadsModal } from "@/components/dashboard/leads/ImportLeadsModal";
+import { ManageStatusesModal, type PipelineItem } from "@/components/dashboard/leads/ManageStatusesModal";
 import { EditLeadModal } from "@/components/dashboard/leads/EditLeadModal";
 import { ViewLeadDrawer } from "@/components/dashboard/leads/ViewLeadDrawer";
 import { DeleteLeadDialog } from "@/components/dashboard/leads/DeleteLeadDialog";
@@ -32,7 +34,7 @@ interface StageConfig {
   lightBg: string;
 }
 
-const PIPELINE: { stage: LeadStage; config: StageConfig }[] = [
+const DEFAULT_PIPELINE: PipelineItem[] = [
   {
     stage: "New",
     config: { label: "New", color: "#3B82F6", bg: "#EFF6FF", border: "#BFDBFE", lightBg: "#EFF6FF" },
@@ -61,11 +63,6 @@ const PIPELINE: { stage: LeadStage; config: StageConfig }[] = [
     stage: "Lost",
     config: { label: "Lost", color: "#EF4444", bg: "#FEF2F2", border: "#FECACA", lightBg: "#FEF2F2" },
   },
-];
-
-const STAGE_FILTERS = [
-  { key: "all", label: "All" },
-  ...PIPELINE.map(p => ({ key: p.stage.toLowerCase(), label: p.config.label })),
 ];
 
 function timeAgo(iso: string) {
@@ -122,11 +119,11 @@ function LeadCard({
       {/* Top row */}
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className={cn(
-            "w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-black shrink-0",
-            lead.avatarColor
-          )}>
-            {lead.name.charAt(0).toUpperCase()}
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-black shrink-0 !bg-[#22C55E]"
+            style={{ backgroundColor: "#22C55E" }}
+          >
+            {(lead.name || "?").charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
             <p className="text-sm font-bold text-[#111827] dark:text-[#F9FAFB] truncate leading-tight">{lead.name}</p>
@@ -199,10 +196,10 @@ function KanbanColumn({
   onDragStart,
   onAddLead,
 }: {
-  stage: LeadStage;
+  stage: any;
   config: StageConfig;
   leads: Lead[];
-  dragOverStage: LeadStage | null;
+  dragOverStage: any;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent) => void;
@@ -314,12 +311,16 @@ export default function LeadsPageClient() {
 
   const {
     leads,
+    isLoading,
+    loadError,
+    reload,
     filteredLeads,
     addLead,
     updateLead,
     moveLeadToStage,
     deleteLead,
     bulkDelete,
+    importLeads,
     searchQuery,
     setSearchQuery,
     activeFilter,
@@ -335,9 +336,29 @@ export default function LeadsPageClient() {
 
   const { addNotification } = useNotificationsContext();
 
-  const [viewMode, setViewMode] = useState<"board" | "table">("board");
+  const [pipeline, setPipeline] = useState<PipelineItem[]>(DEFAULT_PIPELINE);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("whatsflow_leads_pipeline");
+    if (stored) {
+      try {
+        setPipeline(JSON.parse(stored));
+      } catch (e) {
+        console.error("Failed to load custom pipeline:", e);
+      }
+    }
+  }, []);
+
+  const STAGE_FILTERS = [
+    { key: "all", label: "All" },
+    ...pipeline.map((p) => ({ key: p.stage.toLowerCase(), label: p.config.label })),
+  ];
+
+  const [viewMode, setViewMode] = useState<"board" | "table">("table");
   const [addOpen, setAddOpen] = useState(false);
-  const [defaultStage, setDefaultStage] = useState<LeadStage>("New");
+  const [importOpen, setImportOpen] = useState(false);
+  const [defaultStage, setDefaultStage] = useState<any>("New");
   const [editLead, setEditLead] = useState<Lead | null>(null);
   const [viewLead, setViewLead] = useState<Lead | null>(null);
   const [deletingLead, setDeletingLead] = useState<Lead | null>(null);
@@ -347,7 +368,7 @@ export default function LeadsPageClient() {
 
   // Drag state
   const [draggingLead, setDraggingLead] = useState<Lead | null>(null);
-  const [dragOverStage, setDragOverStage] = useState<LeadStage | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
 
   useEffect(() => {
     if (viewLeadId) {
@@ -361,37 +382,73 @@ export default function LeadsPageClient() {
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  function handleAddLead(data: LeadFormData) {
-    const newLead = addLead({ ...data, stage: defaultStage });
-    addNotification({
-      type: "new_lead",
-      title: "New lead received",
-      body: `${newLead.name} added for ${newLead.service}`,
-      time: new Date().toISOString(),
-      read: false,
-      actionLeadId: newLead.id,
-    });
-    toast("Lead added successfully ✓", "success");
+  async function handleAddLead(data: LeadFormData) {
+    try {
+      const newLead = await addLead({ ...data, stage: defaultStage });
+      addNotification({
+        type: "new_lead",
+        title: "New lead received",
+        body: `${newLead.name} added for ${newLead.service}`,
+        time: new Date().toISOString(),
+        read: false,
+        actionLeadId: newLead.id,
+      });
+      toast("Lead added successfully ✓", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to add lead", "error");
+      throw e;
+    }
   }
 
-  function handleUpdateLead(id: string, data: LeadFormData) {
-    updateLead(id, data);
-    toast("Lead updated successfully ✓", "success");
-    if (viewLead?.id === id) setViewLead(prev => prev ? { ...prev, ...data } : null);
+  async function handleUpdateLead(id: string, data: LeadFormData) {
+    try {
+      await updateLead(id, data);
+      toast("Lead updated successfully ✓", "success");
+      if (viewLead?.id === id) {
+        setViewLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            ...data,
+            email: data.email.trim() || undefined,
+            urgency: data.urgency as Lead["urgency"],
+            assignedTo: data.assignedTo.trim() || undefined,
+            notes: data.notes.trim() || undefined,
+          };
+        });
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to update lead", "error");
+      throw e;
+    }
   }
 
-  function handleDeleteLead() {
+  async function handleDeleteLead() {
     if (!deletingLead) return;
-    deleteLead(deletingLead.id);
-    if (viewLead?.id === deletingLead.id) setViewLead(null);
-    setDeletingLead(null);
-    toast("Lead deleted", "error");
+    try {
+      await deleteLead(deletingLead.id);
+      if (viewLead?.id === deletingLead.id) setViewLead(null);
+      setDeletingLead(null);
+      toast("Lead deleted", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to delete lead", "error");
+    }
   }
 
-  function handleBulkDelete() {
-    bulkDelete([...Array.from(selectedIds)]);
-    setBulkDeleteOpen(false);
-    toast(`${selectedIds.size} leads deleted`, "error");
+  async function handleBulkDelete() {
+    try {
+      await bulkDelete([...Array.from(selectedIds)]);
+      setBulkDeleteOpen(false);
+      toast(`${selectedIds.size} leads removed`, "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Bulk delete failed", "error");
+    }
+  }
+
+  function handleSavePipeline(newPipeline: PipelineItem[]) {
+    setPipeline(newPipeline);
+    localStorage.setItem("whatsflow_leads_pipeline", JSON.stringify(newPipeline));
+    toast("Pipeline updated successfully ✓", "success");
   }
 
   function handleSort(key: keyof Lead) {
@@ -412,6 +469,8 @@ export default function LeadsPageClient() {
     }, 800);
   }
 
+
+
   // ── Drag handlers ────────────────────────────────────────────────────────────
 
   function handleDragStart(e: React.DragEvent, lead: Lead) {
@@ -420,22 +479,26 @@ export default function LeadsPageClient() {
     setDraggingLead(lead);
   }
 
-  function handleDragOver(e: React.DragEvent, stage: LeadStage) {
+  function handleDragOver(e: React.DragEvent, stage: string) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     if (dragOverStage !== stage) setDragOverStage(stage);
   }
 
-  function handleDragLeave(stage: LeadStage) {
+  function handleDragLeave(stage: string) {
     if (dragOverStage === stage) setDragOverStage(null);
   }
 
-  function handleDrop(e: React.DragEvent, targetStage: LeadStage) {
+  async function handleDrop(e: React.DragEvent, targetStage: any) {
     e.preventDefault();
     const leadId = e.dataTransfer.getData("leadId");
-    if (leadId && draggingLead?.stage !== targetStage) {
-      moveLeadToStage(leadId, targetStage);
-      toast(`Moved to ${targetStage}`, "success");
+    if (leadId && draggingLead?.stage?.toLowerCase() !== targetStage.toLowerCase()) {
+      try {
+        await moveLeadToStage(leadId, targetStage);
+        toast(`Moved to ${targetStage}`, "success");
+      } catch (err) {
+        toast(err instanceof Error ? err.message : "Could not update stage", "error");
+      }
     }
     setDraggingLead(null);
     setDragOverStage(null);
@@ -447,16 +510,24 @@ export default function LeadsPageClient() {
     ? leads.filter(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()) || l.phone.includes(searchQuery) || l.service.toLowerCase().includes(searchQuery.toLowerCase()))
     : leads;
 
-  const leadsPerStage = (stage: LeadStage) => boardLeads.filter(l => l.stage === stage);
+  const leadsPerStage = (stage: any) => boardLeads.filter(l => l.stage?.toLowerCase() === stage.toLowerCase());
 
   const totalValue = leads.length;
-  const wonCount = leads.filter(l => l.stage === "Booked").length;
+  const wonCount = leads.filter(l => l.stage?.toLowerCase() === "booked").length;
   const convRate = totalValue > 0 ? Math.round((wonCount / totalValue) * 100) : 0;
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-5">
+      {loadError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-red-800 dark:text-red-200">
+          <span>{loadError}</span>
+          <Button type="button" variant="outline" size="sm" className="shrink-0 border-red-300" onClick={() => void reload()}>
+            Retry
+          </Button>
+        </div>
+      )}
       <PageHeading
         title="Leads Management"
         count={leads.length}
@@ -473,6 +544,22 @@ export default function LeadsPageClient() {
               Export
             </Button>
             <Button
+              variant="outline"
+              onClick={() => setImportOpen(true)}
+              className="h-10 text-blue-600 border-[#E5E7EB] dark:border-[#1F2937] hover:bg-blue-50 dark:hover:bg-blue-900/10 font-bold rounded-xl bg-white dark:bg-[#111827]"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Import
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setCustomizeOpen(true)}
+              className="h-10 text-slate-700 dark:text-slate-200 border-[#E5E7EB] dark:border-[#1F2937] hover:bg-slate-50 dark:hover:bg-[#1F2937] font-bold rounded-xl bg-white dark:bg-[#111827]"
+            >
+              <Settings2 className="w-4 h-4 mr-2 text-slate-500" />
+              Customize Pipeline
+            </Button>
+            <Button
               className="bg-[#22C55E] hover:bg-[#16A34A] text-white h-10 px-5 font-bold rounded-xl shadow-md shadow-[#22C55E]/20"
               onClick={() => { setDefaultStage("New"); setAddOpen(true); }}
             >
@@ -486,7 +573,7 @@ export default function LeadsPageClient() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: "Total Leads", value: leads.length, color: "#3B82F6", bg: "#EFF6FF" },
-          { label: "In Progress", value: leads.filter(l => !["Booked","Lost"].includes(l.stage)).length, color: "#F59E0B", bg: "#FFFBEB" },
+          { label: "In Progress", value: leads.filter(l => !["booked","lost"].includes(l.stage?.toLowerCase())).length, color: "#F59E0B", bg: "#FFFBEB" },
           { label: "Booked", value: wonCount, color: "#22C55E", bg: "#F0FDF4" },
           { label: "Conversion", value: `${convRate}%`, color: "#8B5CF6", bg: "#F5F3FF" },
         ].map(s => (
@@ -567,7 +654,7 @@ export default function LeadsPageClient() {
           className="flex gap-4 overflow-x-auto pb-4 -mx-1 px-1"
           onDragEnd={() => { setDraggingLead(null); setDragOverStage(null); }}
         >
-          {PIPELINE.map(({ stage, config }) => (
+          {pipeline.map(({ stage, config }) => (
             <KanbanColumn
               key={stage}
               stage={stage}
@@ -609,13 +696,40 @@ export default function LeadsPageClient() {
       )}
 
       {/* ── Modals ── */}
+      <ManageStatusesModal
+        open={customizeOpen}
+        onClose={() => setCustomizeOpen(false)}
+        pipeline={pipeline}
+        onSave={handleSavePipeline}
+      />
       <AddLeadModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onAdd={handleAddLead}
         defaultStage={defaultStage}
+        stages={pipeline.map((p) => p.stage)}
       />
-      <EditLeadModal open={!!editLead} lead={editLead} onClose={() => setEditLead(null)} onSave={handleUpdateLead} />
+      <ImportLeadsModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImport={async (newLeads) => {
+          const ok = await importLeads(newLeads);
+          if (ok === newLeads.length) {
+            toast(`Successfully imported ${ok} leads ✓`, "success");
+          } else if (ok > 0) {
+            toast(`Imported ${ok} of ${newLeads.length} (some rows failed validation)`, "error");
+          } else {
+            toast("Import failed — check phone numbers and required fields", "error");
+          }
+        }}
+      />
+      <EditLeadModal
+        open={!!editLead}
+        lead={editLead}
+        onClose={() => setEditLead(null)}
+        onSave={handleUpdateLead}
+        stages={pipeline.map((p) => p.stage)}
+      />
       <ViewLeadDrawer
         lead={viewLead} open={!!viewLead} onClose={() => setViewLead(null)}
         onEdit={l => { setViewLead(null); setEditLead(l); }}

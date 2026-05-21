@@ -66,8 +66,9 @@ const STAGES: LeadStage[] = [
 interface Props {
   open: boolean;
   onClose: () => void;
-  onAdd: (data: LeadFormData) => void;
-  defaultStage?: LeadStage;
+  onAdd: (data: LeadFormData) => void | Promise<void>;
+  defaultStage?: any;
+  stages?: string[];
 }
 
 const INITIAL_DATA: LeadFormData = {
@@ -77,12 +78,12 @@ const INITIAL_DATA: LeadFormData = {
   service: "",
   urgency: "" as any,
   source: "",
-  stage: "New",
+  stage: "New" as any,
   assignedTo: "",
   notes: "",
 };
 
-export function AddLeadModal({ open, onClose, onAdd, defaultStage }: Props) {
+export function AddLeadModal({ open, onClose, onAdd, defaultStage, stages = STAGES }: Props) {
   const [formData, setFormData] = useState<LeadFormData>(INITIAL_DATA);
   const [errors, setErrors] = useState<Partial<Record<keyof LeadFormData, string>>>({});
 
@@ -103,11 +104,14 @@ export function AddLeadModal({ open, onClose, onAdd, defaultStage }: Props) {
     return Object.keys(newErrors).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (validate()) {
-      onAdd(formData);
+    if (!validate()) return;
+    try {
+      await Promise.resolve(onAdd(formData));
       handleClose();
+    } catch {
+      /* parent showed toast */
     }
   }
 
@@ -222,7 +226,7 @@ export function AddLeadModal({ open, onClose, onAdd, defaultStage }: Props) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className={selectContentClass}>
-                  {STAGES.map((s) => (
+                  {stages.map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>

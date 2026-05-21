@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { mockNotifications } from "@/lib/mock-data";
 import type { Notification, NotificationType } from "@/types/index";
 
 export type { Notification };
@@ -16,7 +15,7 @@ export interface UseNotificationsReturn {
 
 export function useNotifications(): UseNotificationsReturn {
   const [notifications, setNotifications] =
-    useState<Notification[]>(mockNotifications);
+    useState<Notification[]>([]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

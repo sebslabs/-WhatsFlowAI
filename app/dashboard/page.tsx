@@ -11,22 +11,32 @@ import { timeAgo } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { PageHeading } from "@/components/dashboard/PageHeading";
 import Link from "next/link";
-import type { Conversation } from "@/lib/mock-data";
+// Removed mock type import
+type Conversation = {
+  id: string;
+  leadName?: string;
+  lastMessage?: string;
+  lastMessageTime: string;
+  aiActive?: boolean;
+};
 
 export default function DashboardPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [convData, statsData] = await Promise.all([
+        const [convData, statsData, analyticsData] = await Promise.all([
           apiFetch('/api/conversations'),
-          apiFetch('/api/stats')
+          apiFetch('/api/stats'),
+          apiFetch('/api/analytics').catch(() => null)
         ]);
-        setConversations(convData.slice(0, 5));
+        setConversations((convData || []).slice(0, 5));
         setStats(statsData);
+        setAnalytics(analyticsData);
       } catch (err) {
         console.error("Failed to load dashboard data:", err);
       } finally {
@@ -36,6 +46,8 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
+  const [viewMode, setViewMode] = useState<"real-time" | "historical">("real-time");
+  
   const statItems = [
     {
       label: "Total Leads",
@@ -71,6 +83,18 @@ export default function DashboardPage() {
     },
   ];
 
+  const statsToDisplay = viewMode === "real-time" ? statItems : [
+    ...statItems.slice(0, 3),
+    {
+      label: "Total Booked",
+      value: stats?.totalBooked || stats?.bookedLeads || 0,
+      subLabel: "All time records",
+      trend: "up" as const,
+      trendValue: "Growing",
+      icon: <CalendarCheck className="w-4 h-4" />,
+    },
+  ];
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -87,15 +111,35 @@ export default function DashboardPage() {
         description="Monitor your WhatsApp automation health, lead conversion metrics, and active conversations in real-time."
         rightContent={
           <div className="flex items-center gap-2 bg-white dark:bg-[#111827] border border-[#E5E7EB] dark:border-[#1F2937] p-1 rounded-xl shadow-sm transition-colors duration-300">
-            <button className="px-4 py-1.5 bg-[#22C55E]/10 dark:bg-[#22C55E]/20 text-[#22C55E] text-xs font-bold rounded-lg shadow-sm">Real-time</button>
-            <button className="px-4 py-1.5 text-[#6B7280] dark:text-[#9CA3AF] text-xs font-bold hover:text-[#111827] dark:hover:text-[#F9FAFB] transition-colors">Historical</button>
+            <button 
+              onClick={() => setViewMode("real-time")}
+              className={cn(
+                "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                viewMode === "real-time" 
+                  ? "bg-[#22C55E]/10 dark:bg-[#22C55E]/20 text-[#22C55E] shadow-sm" 
+                  : "text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F9FAFB]"
+              )}
+            >
+              Real-time
+            </button>
+            <button 
+              onClick={() => setViewMode("historical")}
+              className={cn(
+                "px-4 py-1.5 text-xs font-bold rounded-lg transition-all",
+                viewMode === "historical" 
+                  ? "bg-[#22C55E]/10 dark:bg-[#22C55E]/20 text-[#22C55E] shadow-sm" 
+                  : "text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F9FAFB]"
+              )}
+            >
+              Historical
+            </button>
           </div>
         }
       />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        {statItems.map((stat, i) => (
+        {statsToDisplay.map((stat, i) => (
           <StatCard key={stat.label} {...stat} index={i} />
         ))}
       </div>
@@ -103,10 +147,10 @@ export default function DashboardPage() {
       {/* Charts Row */}
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <LeadConversionsChart />
+          <LeadConversionsChart data={analytics?.dailyStats || []} />
         </div>
         <div>
-          <LeadSourcesChart />
+          <LeadSourcesChart data={(analytics?.serviceStats || []).map((s: any) => ({ name: s.service, value: s.count }))} />
         </div>
       </div>
 

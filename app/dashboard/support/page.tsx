@@ -38,24 +38,7 @@ interface Ticket {
   createdAt: string;
 }
 
-const DEFAULT_TICKETS: Ticket[] = [
-  {
-    id: "TCK-103",
-    subject: "Multi-Agent Chat Transfer Delay",
-    description: "Team reported 2-3s delay when using human agent fallback feature via dashboard.",
-    status: "in-progress",
-    priority: "medium",
-    createdAt: "2026-04-22T08:34:00Z"
-  },
-  {
-    id: "TCK-102",
-    subject: "Meta Approval Process Update",
-    description: "Guidance required for getting direct approval on templates containing dynamic URLs.",
-    status: "resolved",
-    priority: "low",
-    createdAt: "2026-04-18T10:12:00Z"
-  }
-];
+// Removed DEFAULT_TICKETS
 
 export default function SupportPage() {
   const { toast } = useToast();
@@ -76,10 +59,10 @@ export default function SupportPage() {
         if (data && data.length > 0) {
           setTickets(data);
         } else {
-          setTickets(DEFAULT_TICKETS);
+          setTickets([]);
         }
       } catch (err) {
-        setTickets(DEFAULT_TICKETS);
+        setTickets([]);
       } finally {
         setLoading(false);
       }
@@ -107,33 +90,15 @@ export default function SupportPage() {
 
       if (savedTicket && savedTicket.id) {
         setTickets([savedTicket, ...tickets]);
+        setIsModalOpen(false);
+        setNewTicket({ subject: "", description: "", priority: "medium" });
+        toast("Support ticket raised successfully.", "success");
       } else {
-        const fallback: Ticket = {
-          id: `TCK-${Math.floor(100 + Math.random() * 900)}`,
-          subject: newTicket.subject,
-          description: newTicket.description,
-          priority: newTicket.priority,
-          status: "open",
-          createdAt: new Date().toISOString()
-        };
-        setTickets([fallback, ...tickets]);
+        throw new Error("Invalid ticket response");
       }
-      setIsModalOpen(false);
-      setNewTicket({ subject: "", description: "", priority: "medium" });
-      toast("Support ticket raised successfully.", "success");
     } catch (err) {
-      const fallback: Ticket = {
-        id: `TCK-${Math.floor(100 + Math.random() * 900)}`,
-        subject: newTicket.subject,
-        description: newTicket.description,
-        priority: newTicket.priority,
-        status: "open",
-        createdAt: new Date().toISOString()
-      };
-      setTickets([fallback, ...tickets]);
-      setIsModalOpen(false);
-      setNewTicket({ subject: "", description: "", priority: "medium" });
-      toast("Support ticket raised successfully.", "success");
+      console.error(err);
+      toast("Failed to create ticket on the server.", "error");
     }
   };
 

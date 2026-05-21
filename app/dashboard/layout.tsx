@@ -1,20 +1,19 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { MobileSidebar } from "@/components/dashboard/MobileSidebar";
 import { Breadcrumbs } from "@/components/dashboard/Breadcrumbs";
 import { NotificationsProvider } from "@/context/NotificationsContext";
+import { WhatsAppNotificationListener } from "@/components/dashboard/WhatsAppNotificationListener";
 import { SidebarProvider, useSidebar } from "@/context/SidebarContext";
 import { ThemeProvider } from "@/components/theme-provider";
 import {
   LayoutDashboard,
   Users,
-  BarChart3,
   Settings,
-  BookOpen,
   Megaphone,
   Workflow,
   MessageSquare,
@@ -26,7 +25,7 @@ import { cn } from "@/lib/utils";
 const mobileNavItems = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { label: "Leads", href: "/dashboard/leads", icon: Users },
-  { label: "Chats", href: "/dashboard/conversations", icon: WhatsAppIcon },
+  { label: "Chats", href: "/dashboard/conversations", icon: MessageSquare },
   { label: "Automation", href: "/dashboard/automation", icon: Workflow },
   { label: "Campaigns", href: "/dashboard/campaigns", icon: Megaphone },
   { label: "Templates", href: "/dashboard/templates", icon: MessageSquare },
@@ -89,30 +88,14 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
-  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const isLoggedIn = localStorage.getItem("isLoggedIn");
-    if (isLoggedIn !== "true") {
-      router.push("/auth/login");
-    } else {
-      setIsAuthorized(true);
-    }
-  }, [router]);
-
-  if (isAuthorized === null) {
-    return <div className="min-h-screen bg-[#F9FAFB] dark:bg-[#0B0F1A]" />;
-  }
-
+  // Auth is enforced server-side by middleware.ts via Supabase JWT validation.
+  // The middleware redirects unauthenticated users to /auth/login before this
+  // component is ever rendered. No client-side auth check is needed here.
   return (
     <ThemeProvider
       attribute="class"
@@ -122,10 +105,10 @@ export default function DashboardLayout({
     >
       <SidebarProvider>
         <NotificationsProvider>
+          <WhatsAppNotificationListener />
           <DashboardShell>{children}</DashboardShell>
         </NotificationsProvider>
       </SidebarProvider>
     </ThemeProvider>
   );
 }
-

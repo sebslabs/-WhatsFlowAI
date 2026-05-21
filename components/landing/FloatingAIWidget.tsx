@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, ChevronDown, Bot, Sparkles, ArrowUp, User, Mail, Phone, CheckCircle2 } from "lucide-react";
+import { X, Send, ChevronDown, Bot, Sparkles, ArrowUp, User, Mail, Phone, CheckCircle2, Loader2 } from "lucide-react";
+import { apiFetch } from "@/lib/api-config";
 
 const QUICK_REPLIES = [
   "What are the features?",
@@ -20,6 +21,7 @@ export function FloatingAIWidget() {
   const [chat, setChat] = useState([
     { sender: "ai", text: "Hi! I'm WhatsFlow AI. How can I help you automate your business today? 🚀" }
   ]);
+  const [isTyping, setIsTyping] = useState(false);
   
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -47,16 +49,26 @@ export function FloatingAIWidget() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const processResponse = (userText: string) => {
+  const processResponse = async (userText: string) => {
     const newChat = [...chat, { sender: "user", text: userText }];
     setChat(newChat);
+    setIsTyping(true);
 
-    setTimeout(async () => {
-      let aiResponse = "";
-      
+    let aiResponse = "";
+    try {
       if (step === "chat") {
-        aiResponse = "That sounds interesting! I can definitely help with that. To get started, may I ask for your name?";
-        setStep("name");
+        const normalized = userText.toLowerCase();
+        if (normalized.includes("book a demo") || normalized.includes("how does it work") || normalized.includes("pricing")) {
+          aiResponse = "Excellent! I'd love to coordinate details to get that answered properly. To begin, may I ask for your name?";
+          setStep("name");
+        } else {
+          // Direct public AI routing
+          const data = await apiFetch('/api/chatbot/public', {
+            method: 'POST',
+            body: JSON.stringify({ message: userText })
+          });
+          aiResponse = data.reply || "Interesting point! Please let me know if you'd like to 'Book a demo' to dive deeper.";
+        }
       } else if (step === "name") {
         setUserData(prev => ({ ...prev, name: userText }));
         aiResponse = `Nice to meet you, ${userText}! And what is your work email address?`;
@@ -70,14 +82,15 @@ export function FloatingAIWidget() {
         setUserData(finalData);
         aiResponse = "Thank you! I've received your details. Our team will contact you on WhatsApp within minutes. 😊";
         setStep("completed");
-        
-        // SEND DATA TO EMAIL LOGIC
-        console.log("Sending Lead Data to achintha@sebslabs.com:", finalData);
-        // fetch('/api/leads', { method: 'POST', body: JSON.stringify(finalData) });
+        console.log("Sending Lead Data to sales:", finalData);
       }
-
+    } catch (err) {
+      console.error("Chat error:", err);
+      aiResponse = "Pardon me, I got a bit overwhelmed. Please try again or just say 'Book a demo'!";
+    } finally {
+      setIsTyping(false);
       setChat(prev => [...prev, { sender: "ai", text: aiResponse }]);
-    }, 1000);
+    }
   };
 
   const handleSend = (e: React.FormEvent) => {
@@ -210,6 +223,16 @@ export function FloatingAIWidget() {
                 </div>
               ))}
               
+              {isTyping && (
+                <div className="flex justify-start animate-in fade-in duration-300">
+                  <div className="max-w-[85%] px-4 py-3 bg-white border border-gray-100 rounded-2xl rounded-tl-none flex items-center gap-1.5 shadow-sm">
+                    <div className="w-1.5 h-1.5 bg-[#22c55e] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <div className="w-1.5 h-1.5 bg-[#22c55e] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <div className="w-1.5 h-1.5 bg-[#22c55e] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </div>
+              )}
+              
               {/* Quick Replies Section - Only show when step is 'chat' */}
               {step === "chat" && (
                 <div className="flex flex-wrap gap-2 mt-2">
@@ -244,22 +267,25 @@ export function FloatingAIWidget() {
                     </div>
                     <input
                       type="text"
+                      disabled={isTyping}
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
                       placeholder={
+                        isTyping ? "Typing response..." :
                         step === "name" ? "Type your name..." : 
                         step === "email" ? "Enter your email..." :
                         step === "phone" ? "Enter WhatsApp number..." :
                         "Type your message..."
                       }
-                      className="w-full bg-gray-50 border-transparent rounded-2xl pl-11 pr-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 transition-all font-bold text-[#0f172a] placeholder:text-gray-400"
+                      className="w-full bg-gray-50 border-transparent rounded-2xl pl-11 pr-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 transition-all font-bold text-[#0f172a] placeholder:text-gray-400 disabled:opacity-60"
                     />
                   </div>
                   <button
                     type="submit"
-                    className="bg-[#22c55e] hover:bg-[#16a34a] text-white w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 shadow-md shadow-green-500/20"
+                    disabled={isTyping}
+                    className="bg-[#22c55e] hover:bg-[#16a34a] text-white w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 shadow-md shadow-green-500/20 disabled:opacity-60"
                   >
-                    <Send className="w-5 h-5" />
+                    {isTyping ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                   </button>
                 </form>
               )}

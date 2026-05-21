@@ -12,7 +12,9 @@ import {
   Users,
   X,
   Plus,
+  MessageSquare,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { LeadStageBadge } from "./LeadStageBadge";
 import { LeadUrgencyBadge } from "./LeadUrgencyBadge";
@@ -67,6 +69,7 @@ export function LeadsTable({
   onClearFilters,
   onAddLead,
 }: Props) {
+  const router = useRouter();
   const totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE));
   const paged = leads.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const allPageSelected =
@@ -225,9 +228,12 @@ export function LeadsTable({
                   {/* Avatar + Name */}
                   <td className="px-3 py-4">
                     <div className="flex items-center gap-3">
-                      <div className={cn("w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-sm border-2 border-white dark:border-[#111827]", lead.avatarColor)}>
+                      <div
+                        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-sm border-2 border-white dark:border-[#111827] !bg-[#22C55E]"
+                        style={{ backgroundColor: "#22C55E" }}
+                      >
                         <span className="text-white text-xs font-bold leading-none">
-                          {lead.name.charAt(0).toUpperCase()}
+                          {(lead.name || "?").charAt(0).toUpperCase()}
                         </span>
                       </div>
                       <div className="min-w-0">
@@ -289,6 +295,15 @@ export function LeadsTable({
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="h-8 w-8 text-[#6B7280] dark:text-[#9CA3AF] hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-all"
+                        onClick={() => router.push(`/dashboard/conversations?leadId=${lead.id}`)}
+                        title="Open Chat"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         className="h-8 w-8 text-[#6B7280] dark:text-[#9CA3AF] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all"
                         onClick={() => onEdit(lead)}
                         title="Edit Lead"
@@ -323,7 +338,7 @@ export function LeadsTable({
               size="sm"
               disabled={page === 0}
               onClick={() => setPage(page - 1)}
-              className="h-8 px-3 text-xs font-bold border-[#E5E7EB] dark:border-[#1F2937] hover:bg-white dark:hover:bg-[#111827] transition-all disabled:opacity-40"
+              className="h-8 px-3 text-xs font-bold border-[#E5E7EB] dark:border-[#1F2937] bg-white dark:bg-[#111827] text-[#111827] dark:text-[#F9FAFB] hover:bg-[#F9FAFB] dark:hover:bg-[#0B0F1A] transition-all disabled:opacity-30"
             >
               Prev
             </Button>
@@ -350,7 +365,7 @@ export function LeadsTable({
               size="sm"
               disabled={page === totalPages - 1}
               onClick={() => setPage(page + 1)}
-              className="h-8 px-3 text-xs font-bold border-[#E5E7EB] dark:border-[#1F2937] hover:bg-white dark:hover:bg-[#111827] transition-all disabled:opacity-40"
+              className="h-8 px-3 text-xs font-bold border-[#E5E7EB] dark:border-[#1F2937] bg-white dark:bg-[#111827] text-[#111827] dark:text-[#F9FAFB] hover:bg-[#F9FAFB] dark:hover:bg-[#0B0F1A] transition-all disabled:opacity-30"
             >
               Next
             </Button>
