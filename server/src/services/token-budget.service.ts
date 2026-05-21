@@ -62,7 +62,7 @@ export class TokenBudgetService {
 
     return {
       allowed,
-      reason,
+      ...(reason ? { reason } : {}),
       tokensUsedToday,
       tokenLimit,
       costUsedToday,

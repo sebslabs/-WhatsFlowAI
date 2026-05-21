@@ -65,7 +65,11 @@ export class AiReplyPipeline {
     const budget = await TokenBudgetService.checkBudget(tenantId);
     if (!budget.allowed) {
       logger.warn('[AiReplyPipeline] Token budget exceeded — skipping AI reply', { tenantId, reason: budget.reason });
-      return { replied: false, handoff: true, blockReason: budget.reason };
+      return {
+        replied: false,
+        handoff: true,
+        ...(budget.reason ? { blockReason: budget.reason } : {}),
+      };
     }
 
     if (HumanHandoffService.containsHandoffIntent(message)) {
@@ -122,7 +126,7 @@ export class AiReplyPipeline {
       modelStr,
       tenantId,
       agent.id,
-      { contactId, leadId },
+      { contactId, ...(leadId ? { leadId } : {}) },
       conversationId
     );
 
@@ -167,7 +171,7 @@ export class AiReplyPipeline {
         handoff: true,
         replyText: validation.sanitizedText.slice(0, 1000),
         model: modelStr,
-        blockReason: validation.reason,
+        ...(validation.reason ? { blockReason: validation.reason } : {}),
       };
     }
 

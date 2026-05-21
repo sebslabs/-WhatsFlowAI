@@ -399,7 +399,7 @@ async function runAiAutoReply(
     tenantId,
     contactId,
     conversationId,
-    leadId,
+    ...(leadId ? { leadId } : {}),
     message: inboundText,
     agent: activeAgent,
     history,

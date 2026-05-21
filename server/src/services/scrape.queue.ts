@@ -8,7 +8,7 @@ export const SCRAPE_QUEUE_NAME = 'website_scrape_jobs';
 // ── Queue Initialisation ──────────────────────────────────────────────────────
 const connection = getRedisClient();
 
-export const scrapeQueue = new Queue<ScrapeJobData>(SCRAPE_QUEUE_NAME, {
+export const scrapeQueue = new Queue<ScrapeJobData, any, string>(SCRAPE_QUEUE_NAME, {
   connection,
   defaultJobOptions: {
     attempts: 3, // Retry up to 3 times on transient browser crashes
@@ -18,7 +18,6 @@ export const scrapeQueue = new Queue<ScrapeJobData>(SCRAPE_QUEUE_NAME, {
     },
     removeOnComplete: { age: 3600 }, // Keep completed records for 1 hour to debug
     removeOnFail: { age: 86400 * 7 }, // Keep failures for 7 days
-    timeout: 300000, // Hard limit of 5 minutes per scraping job
   },
 });
 
@@ -36,7 +35,12 @@ export async function enqueueScrapeJob(
 
   await scrapeQueue.add(
     'process_scrape',
-    { jobId, tenantId, url, label },
+    {
+      jobId,
+      tenantId,
+      url,
+      ...(label ? { label } : {}),
+    },
     { jobId }
   );
 

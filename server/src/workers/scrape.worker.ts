@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import { getRedisClient } from '../lib/redis.js';
 import { logger } from '../utils/logger.js';
 import { ScraperService } from '../services/scraper.service.js';
-import { Chunker } from '../utils/chunker.ts';
+import { Chunker } from '../utils/chunker.js';
 import { EmbeddingService } from '../services/embedding.service.js';
 import { OpenRouterClient } from '../services/openrouter.client.js';
 import { emitToTenant } from '../lib/realtime.js';

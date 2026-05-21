@@ -25,6 +25,7 @@ async function callInternalAI(payload: {
   userId?: string;
   agentId?: string;
   handoffContext?: { contactId: string; leadId?: string };
+  conversationId?: string;
 }): Promise<{ success: boolean; text: string; error?: string }> {
   try {
     if (!INTERNAL_API_KEY) {
@@ -53,7 +54,7 @@ async function callInternalAI(payload: {
     return {
       success: Boolean(data.success),
       text: String(data.text ?? ''),
-      error: data.error ? String(data.error) : undefined,
+      ...(data.error ? { error: String(data.error) } : {}),
     };
   } catch (error: any) {
     console.error('[AIService] Consolidated bridge request failed:', error.message);
@@ -176,9 +177,9 @@ export class AIService {
       history,
       model: routedModel,
       tenantId,
-      agentId,
-      handoffContext,
-      conversationId,
+      ...(agentId ? { agentId } : {}),
+      ...(handoffContext ? { handoffContext } : {}),
+      ...(conversationId ? { conversationId } : {}),
     });
     return res.text;
   }

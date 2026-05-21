@@ -118,6 +118,7 @@ export interface Lead {
   /** Flow state tracking — added by migration */
   current_flow_id: string | null
   current_step_index: number
+  ai_active?: boolean
   created_at: string
   updated_at: string
 }
