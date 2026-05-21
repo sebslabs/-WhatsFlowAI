@@ -23,29 +23,68 @@ function getIdentifier(req: Request): string {
   return `ip:${ip}`
 }
 
+// SECURITY FIX (HIGH #6): Redis client singleton — instantiate once per process,
+// not on every request. Creating new Redis() per request exhausted connection
+// pools under moderate load and caused cascading failures.
+let _redisInstance: import('@upstash/redis').Redis | null = null
+let _redisInitAttempted = false
+
+async function getRedisClient(): Promise<import('@upstash/redis').Redis | null> {
+  if (_redisInitAttempted) return _redisInstance
+
+  _redisInitAttempted = true
+
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    return null
+  }
+
+  try {
+    const { Redis } = await import('@upstash/redis')
+    _redisInstance = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+    return _redisInstance
+  } catch (err) {
+    console.error('[rate-limit] Failed to initialise Redis singleton:', err)
+    return null
+  }
+}
+
+// Cache Ratelimit instances per config key to avoid re-instantiation
+const ratelimitCache = new Map<string, import('@upstash/ratelimit').Ratelimit>()
+
 function createRateLimiter(options: RateLimitOptions) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    if (!process.env.UPSTASH_REDIS_REST_URL) {
-      // Redis not configured — skip in development
+    const redis = await getRedisClient()
+
+    if (!redis) {
+      // Redis not configured — skip in development; block in production
+      // SECURITY FIX (HIGH #6): Fail-closed in production to prevent DDoS cost explosion.
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[rate-limit] Redis unavailable in production \u2014 failing closed to protect system')
+        res.status(503).json({ error: 'Service temporarily unavailable. Please retry.' })
+        return
+      }
+      // Non-production: skip rate limiting
       next()
       return
     }
 
     try {
-      const { Redis } = await import('@upstash/redis')
       const { Ratelimit } = await import('@upstash/ratelimit')
+      const cacheKey = `${options.prefix}:${options.limit}:${options.windowSec}`
 
-      const redis = new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL!,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-      })
-
-      const ratelimit = new Ratelimit({
-        redis,
-        limiter: Ratelimit.slidingWindow(options.limit, `${options.windowSec} s`),
-        prefix: `whatsflow:${options.prefix}`,
-        analytics: true,
-      })
+      let ratelimit = ratelimitCache.get(cacheKey)
+      if (!ratelimit) {
+        ratelimit = new Ratelimit({
+          redis,
+          limiter: Ratelimit.slidingWindow(options.limit, `${options.windowSec} s`),
+          prefix: `whatsflow:${options.prefix}`,
+          analytics: true,
+        })
+        ratelimitCache.set(cacheKey, ratelimit)
+      }
 
       const identifier = getIdentifier(req)
       const result = await ratelimit.limit(identifier)
@@ -63,8 +102,14 @@ function createRateLimiter(options: RateLimitOptions) {
 
       next()
     } catch (err) {
-      // If Redis is unavailable, fail open (don't block traffic)
-      console.error('[rate-limit] Redis error, failing open:', err)
+      // SECURITY FIX (HIGH #6): On Redis error, fail-closed in production to prevent
+      // an attacker from intentionally triggering Redis errors to bypass rate limits.
+      console.error('[rate-limit] Redis error during limit check:', err)
+      if (process.env.NODE_ENV === 'production') {
+        res.status(503).json({ error: 'Service temporarily unavailable. Please retry.' })
+        return
+      }
+      // Non-production: fail-open (allow traffic through for developer convenience)
       next()
     }
   }

@@ -12,7 +12,13 @@
 
 import type { Request, Response } from 'express'
 import crypto from 'crypto'
+import { createClient } from '@supabase/supabase-js'
 import { enqueueWebhookMessage, type WebhookJobData } from '../services/queue.service.js'
+
+const adminDb = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 function verifyHmacSignature(rawBody: Buffer, signatureHeader: string | undefined): boolean {
   const secret = process.env.META_APP_SECRET
@@ -34,18 +40,44 @@ function verifyHmacSignature(rawBody: Buffer, signatureHeader: string | undefine
 
 export class WebhookController {
   /** Meta webhook verification handshake */
-  static verify(req: Request, res: Response): void {
+  static async verify(req: Request, res: Response): Promise<void> {
     const mode      = req.query['hub.mode']
     const token     = req.query['hub.verify_token']
     const challenge = req.query['hub.challenge']
+    const tenantId  = req.query['tenantId'] as string | undefined
 
-    if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
-      console.log('[webhook] Meta verification handshake accepted')
+    let verifyToken = process.env.WHATSAPP_VERIFY_TOKEN
+
+    // Look up custom verify token if tenantId is passed
+    if (tenantId) {
+      try {
+        const { data } = await adminDb
+          .from('whatsapp_accounts')
+          .select('verify_token')
+          .eq('tenant_id', tenantId)
+          .maybeSingle()
+
+        if (data?.verify_token) {
+          verifyToken = data.verify_token
+        }
+      } catch (err) {
+        console.error('[webhook-verify] Tenant lookup failed:', err)
+      }
+    }
+
+    if (!verifyToken) {
+      console.error('[webhook] No verification token configured')
+      res.sendStatus(503)
+      return
+    }
+
+    if (mode === 'subscribe' && token === verifyToken) {
+      console.log('[webhook] Meta verification handshake accepted', { tenantId: tenantId ?? 'global' })
       res.status(200).send(challenge)
       return
     }
 
-    console.warn('[webhook] Verification failed — invalid token or mode')
+    console.warn('[webhook] Verification failed — token mismatch or invalid mode', { tenantId: tenantId ?? 'global' })
     res.sendStatus(403)
   }
 

@@ -22,7 +22,11 @@ import {
   Users,
   BarChart3,
   Calendar,
+  Phone,
+  Globe
 } from "lucide-react";
+import { apiFetch } from "@/lib/api-config";
+
 
 export function TopBar() {
   const { isCollapsed, toggleMobileMenu } = useSidebar();
@@ -36,10 +40,62 @@ export function TopBar() {
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [waConfig, setWaConfig] = useState<any>(null);
+  const [qrSession, setQrSession] = useState<any>(null);
+  const [subData, setSubData] = useState<any>(null);
+  const [profile, setProfile] = useState<{ full_name?: string; personal_email?: string; avatar_url?: string } | null>(null);
 
   useEffect(() => {
     setMounted(true);
+    fetchWaConfig();
+    fetchSubData();
+
+    // Dynamically synchronize profile changes across layout components in real-time
+    const handleProfileUpdate = () => {
+      fetchSubData();
+    };
+    window.addEventListener('profile-updated', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('profile-updated', handleProfileUpdate);
+    };
   }, []);
+
+  async function fetchSubData() {
+    try {
+      const data = await apiFetch('/api/settings');
+      if (data) {
+        if (data.active_subscription) {
+          setSubData(data.active_subscription);
+        }
+        setProfile({
+          full_name: data.full_name,
+          personal_email: data.personal_email,
+          avatar_url: data.avatar_url,
+        });
+      }
+    } catch (err) {
+      console.error("TopBar subscription and settings check failed", err);
+    }
+  }
+
+  async function fetchWaConfig() {
+    try {
+      const data = await apiFetch('/api/whatsapp/config');
+      setWaConfig(data);
+    } catch (err) {
+      console.error("TopBar WhatsApp check failed", err);
+    }
+
+    try {
+      const qrData = await apiFetch('/api/whatsapp/qr');
+      if (Array.isArray(qrData)) {
+        const activeQr = qrData.find((s: any) => s.status === 'connected');
+        setQrSession(activeQr || null);
+      }
+    } catch (err) {
+      console.error("TopBar WhatsApp QR check failed", err);
+    }
+  }
 
   useEffect(() => {
     setIsNavigating(false);
@@ -88,7 +144,7 @@ export function TopBar() {
       )}
     >
       {/* Left Section: Mobile Menu & Logo */}
-      <div className="flex-1 flex items-center justify-start gap-4">
+      <div className="flex items-center justify-start gap-4 shrink-0">
         <div className="flex items-center lg:hidden">
           <button
             onClick={toggleMobileMenu}
@@ -99,109 +155,53 @@ export function TopBar() {
           <span className="ml-3 font-bold text-[#22C55E] text-lg tracking-tight">WhatsFlow</span>
         </div>
 
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button
-              className="bg-[#22C55E] hover:bg-[#16A34A] text-white gap-2 rounded-xl h-9 px-4 shadow-lg shadow-green-500/15 transition-all active:scale-[0.98] hidden lg:flex font-semibold text-xs shrink-0"
-            >
-              <img 
-                src="https://img.icons8.com/external-tanah-basah-glyph-tanah-basah/48/external-meta-social-media-tanah-basah-glyph-tanah-basah.png" 
-                className="w-4 h-4 brightness-0 invert" 
-                alt="Meta" 
-              />
-              Connect WhatsApp
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[480px] rounded-[32px] border-none p-0 overflow-hidden shadow-2xl bg-white dark:bg-[#111827]">
-            <div className="bg-[#22C55E] p-8 text-white relative overflow-hidden">
-              <div className="relative z-10">
-                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mb-4 backdrop-blur-sm">
-                  <img 
-                    src="https://img.icons8.com/external-tanah-basah-glyph-tanah-basah/48/external-meta-social-media-tanah-basah-glyph-tanah-basah.png" 
-                    className="w-6 h-6 brightness-0 invert" 
-                    alt="Meta" 
-                  />
-                </div>
-                <h2 className="text-2xl font-bold mb-2">Connect your WhatsApp</h2>
-                <p className="text-white/80 text-sm leading-relaxed max-w-[280px]">
-                  Link your account to start automating conversations and managing leads instantly.
-                </p>
-              </div>
-              <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-white/10 rounded-full blur-3xl" />
+        {waConfig?.status === 'connected' ? (
+          <Button
+            onClick={() => router.push('/dashboard/whatsapp')}
+            className="bg-[#22C55E]/10 border border-[#22C55E]/25 hover:bg-[#22C55E]/20 text-[#22C55E] gap-2 rounded-xl h-9 px-3 hidden lg:flex font-bold text-[11px] shrink-0 shadow-sm active:scale-[0.98] transition-all items-center group"
+            title="View Integrated WhatsApp Settings"
+          >
+            <div className="relative flex items-center justify-center">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-ping absolute opacity-75" />
+              <div className="w-1.5 h-1.5 rounded-full bg-[#22C55E] relative" />
             </div>
-
-            <div className="p-8 bg-white dark:bg-[#111827]">
-              <div className="flex flex-col md:flex-row gap-8 items-center">
-                <div className="w-48 h-48 bg-[#F9FAFB] dark:bg-[#0B0F1A] border-2 border-[#E5E7EB] dark:border-[#1F2937] rounded-[24px] p-4 flex flex-col items-center justify-center relative group shrink-0">
-                  {connecting ? (
-                    <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="w-8 h-8 text-[#22C55E] animate-spin" />
-                      <span className="text-[10px] font-bold text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-widest">Linking...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <QrCode className="w-full h-full text-[#111827] dark:text-[#F9FAFB] opacity-20 dark:opacity-40" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-10 h-10 bg-white dark:bg-[#0B0F1A] rounded-xl shadow-lg border border-[#E5E7EB] dark:border-[#1F2937] flex items-center justify-center">
-                          <img src="/logo-robot.png" className="w-6 h-6 object-contain" alt="Logo" />
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className="flex-1 space-y-5">
-                  {[
-                    { step: 1, text: "Open WhatsApp on your phone" },
-                    { step: 2, text: "Tap Menu or Settings and select Linked Devices" },
-                    { step: 3, text: "Point your phone to this screen to capture the code" }
-                  ].map((s) => (
-                    <div key={s.step} className="flex gap-3">
-                      <span className="w-5 h-5 rounded-full bg-[#E8FBF0] dark:bg-[#22C55E]/10 text-[#22C55E] text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
-                        {s.step}
-                      </span>
-                      <p className="text-sm text-[#4B5563] dark:text-[#9CA3AF] leading-tight font-medium">{s.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-8 flex items-center gap-3 p-4 bg-[#F9FAFB] dark:bg-[#0B0F1A] rounded-2xl border border-[#E5E7EB] dark:border-[#1F2937]">
-                <AlertCircle className="w-4 h-4 text-[#22C55E] shrink-0" />
-                <p className="text-[11px] text-[#6B7280] dark:text-[#9CA3AF] leading-tight">
-                  By connecting, you agree to our terms of service regarding automated messaging and lead handling.
-                </p>
-              </div>
-
-              <div className="mt-8">
-                <Button
-                  onClick={simulateConnect}
-                  disabled={connecting}
-                  className="w-full bg-[#22C55E] hover:bg-[#16A34A] text-white h-12 rounded-xl font-bold shadow-lg shadow-green-500/15 transition-all active:scale-[0.98]"
-                >
-                  {connecting ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Verifying Connection...
-                    </div>
-                  ) : (
-                    "I've Scanned the Code"
-                  )}
-                </Button>
-                <button
-                  onClick={() => setOpen(false)}
-                  className="w-full mt-4 text-[11px] font-bold text-[#9CA3AF] hover:text-[#111827] dark:hover:text-[#F9FAFB] transition-colors"
-                >
-                  Cancel Connection
-                </button>
-              </div>
+            <Phone className="w-3 h-3 opacity-80 group-hover:scale-110 transition-transform" />
+            <span>
+              {waConfig.display_phone_number || `WA: ...${waConfig.phone_number_id.slice(-4)}`}
+            </span>
+          </Button>
+        ) : qrSession ? (
+          <Button
+            onClick={() => router.push('/dashboard/whatsapp')}
+            className="bg-[#16A34A]/10 border border-[#16A34A]/25 hover:bg-[#16A34A]/20 text-[#16A34A] gap-2 rounded-xl h-9 px-3 hidden lg:flex font-bold text-[11px] shrink-0 shadow-sm active:scale-[0.98] transition-all items-center group"
+            title="View QR-Connected WhatsApp Settings"
+          >
+            <div className="relative flex items-center justify-center">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-ping absolute opacity-75" />
+              <div className="w-1.5 h-1.5 rounded-full bg-[#16A34A] relative" />
             </div>
-          </DialogContent>
-        </Dialog>
+            <QrCode className="w-4 h-4 text-[#16A34A] opacity-80 group-hover:scale-110 transition-transform" />
+            <span>
+              {qrSession.phone_number ? `QR: +${qrSession.phone_number}` : 'QR Connected'}
+            </span>
+          </Button>
+        ) : (
+          <Button
+            onClick={() => router.push('/dashboard/whatsapp')}
+            className="bg-[#22C55E] hover:bg-[#16A34A] text-white gap-2 rounded-xl h-9 px-4 shadow-lg shadow-green-500/15 transition-all active:scale-[0.98] hidden lg:flex font-semibold text-xs shrink-0 items-center"
+          >
+            <img 
+              src="https://img.icons8.com/external-tanah-basah-glyph-tanah-basah/48/external-meta-social-media-tanah-basah-glyph-tanah-basah.png" 
+              className="w-4 h-4 brightness-0 invert" 
+              alt="Meta" 
+            />
+            Connect WhatsApp
+          </Button>
+        )}
       </div>
 
       {/* Center Section: Search Bar */}
-      <div className="hidden md:flex flex-[2] items-center justify-center px-4">
+      <div className="hidden md:flex flex-1 items-center justify-center px-4 max-w-md mx-auto">
         <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
           <DialogTrigger asChild>
             <div className="w-full max-w-md flex items-center gap-2 text-[#6B7280] dark:text-[#9CA3AF] bg-[#F9FAFB] dark:bg-[#111827] border border-[#E5E7EB] dark:border-[#1F2937] px-4 py-2 rounded-xl hover:border-[#22C55E]/30 transition-all cursor-pointer group">
@@ -310,7 +310,72 @@ export function TopBar() {
       </div>
 
       {/* Right Section: Actions + Theme Toggle Switch */}
-      <div className="flex-1 flex items-center justify-end gap-1 sm:gap-3">
+      <div className="flex items-center justify-end gap-1.5 sm:gap-3 shrink-0">
+        {/* Real-time subscription, trial days remaining and AI conversation progress bar */}
+        {subData && (
+          <div className="hidden lg:flex items-center gap-3 bg-gray-50 dark:bg-[#111827] px-3 py-1.5 rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] text-xs">
+            {subData.subscription_status === 'trial' && (
+              <div className="flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold px-2 py-0.5 rounded-lg border border-amber-500/25 animate-pulse shrink-0">
+                <AlertCircle className="w-3 h-3" />
+                <span>{subData.trial_days_remaining ?? 7}d Trial Left</span>
+              </div>
+            )}
+            {subData.subscription_status === 'grace_period' && (
+              <div className="flex items-center gap-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold px-2 py-0.5 rounded-lg border border-rose-500/25 animate-pulse shrink-0">
+                <AlertCircle className="w-3 h-3" />
+                <span>Grace: {subData.grace_days_remaining ?? 3}d Left</span>
+              </div>
+            )}
+            {subData.subscription_status === 'expired' && (
+              <div className="flex items-center gap-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold px-2 py-0.5 rounded-lg border border-rose-500/25 shrink-0">
+                <AlertCircle className="w-3 h-3" />
+                <span>Trial Expired</span>
+              </div>
+            )}
+            {subData.subscription_status === 'suspended' && (
+              <div className="flex items-center gap-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold px-2 py-0.5 rounded-lg border border-rose-500/25 shrink-0">
+                <AlertCircle className="w-3 h-3" />
+                <span>Suspended</span>
+              </div>
+            )}
+            <div 
+              className="flex flex-col gap-1 min-w-[130px] shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => router.push('/dashboard/settings?tab=billing')}
+              title="View Billing Settings"
+            >
+              <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 dark:text-gray-400">
+                <span>Active Leads</span>
+                <span className={cn(
+                  subData.ai_conversation_used / subData.ai_conversation_limit >= 0.8 ? "text-amber-500 font-extrabold" : "",
+                  subData.ai_conversation_used >= subData.ai_conversation_limit ? "text-red-500 font-extrabold" : ""
+                )}>
+                  {subData.ai_conversation_used?.toLocaleString()} / {subData.ai_conversation_limit?.toLocaleString()}
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                <div 
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    subData.ai_conversation_used / subData.ai_conversation_limit >= 1.0 ? "bg-red-500" :
+                    subData.ai_conversation_used / subData.ai_conversation_limit >= 0.8 ? "bg-amber-500" : "bg-[#22C55E]"
+                  )}
+                  style={{ width: `${Math.min(100, ((subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500)) * 100)}%` }}
+                />
+              </div>
+            </div>
+            {(subData.ai_conversation_used / subData.ai_conversation_limit >= 0.8 || ['trial', 'grace_period', 'expired', 'suspended'].includes(subData.subscription_status)) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => router.push('/dashboard/settings?tab=billing')}
+                className="text-[10px] text-amber-600 dark:text-amber-400 hover:text-amber-700 font-bold h-7 px-2 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg shrink-0 active:scale-[0.98] transition-all"
+              >
+                Upgrade
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* 🌗 Premium Theme Toggle Switch */}
         <div className="relative flex items-center" title="Switch theme">
           <button
@@ -366,8 +431,21 @@ export function TopBar() {
           onClick={() => router.push('/dashboard/settings?tab=profile')}
           className="flex items-center gap-2 p-1 hover:bg-gray-50 dark:hover:bg-[#111827] rounded-full transition-colors border border-transparent hover:border-[#E5E7EB] dark:hover:border-[#1F2937]"
         >
-          <div className="w-8 h-8 rounded-full bg-[#22C55E] flex items-center justify-center text-white shadow-sm ring-2 ring-white dark:ring-[#111827]">
-            <User className="w-4 h-4" />
+          <div className="w-8 h-8 rounded-full bg-[#22C55E] flex items-center justify-center text-white shadow-sm ring-2 ring-white dark:ring-[#111827] overflow-hidden">
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt={profile.full_name || "User"} className="w-full h-full object-cover" />
+            ) : profile?.full_name ? (
+              <span className="text-xs font-bold">
+                {profile.full_name
+                  .split(" ")
+                  .map((n: any) => n[0])
+                  .join("")
+                  .toUpperCase()
+                  .slice(0, 2)}
+              </span>
+            ) : (
+              <User className="w-4 h-4" />
+            )}
           </div>
         </button>
       </div>

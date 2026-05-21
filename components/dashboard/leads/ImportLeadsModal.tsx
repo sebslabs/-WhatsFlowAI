@@ -204,6 +204,13 @@ export function ImportLeadsModal({ open, onClose, onImport }: Props) {
       return;
     }
 
+    if (uploadedFile.size > 10 * 1024 * 1024) {
+      setErrorMessage("File size exceeds the 10MB upload limit.");
+      setFile(null);
+      setParsedLeads([]);
+      return;
+    }
+
     setFile(uploadedFile);
     setErrorMessage(null);
 

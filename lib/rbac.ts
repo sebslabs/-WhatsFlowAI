@@ -67,9 +67,16 @@ const PERMISSIONS: Record<string, UserRole[]> = {
  * Deny by default: returns false for any unknown permission.
  */
 export function hasPermission(role: UserRole, permission: string): boolean {
+  // 1. Owners possess absolute super-user permissions across the entire system
+  if (role === 'owner') return true
+
   const allowed = PERMISSIONS[permission]
   if (!allowed) return false
-  return allowed.includes(role)
+
+  // 2. Support role hierarchy mapping
+  return allowed.includes(role) || 
+         (role === 'agent' && allowed.includes('user')) ||
+         (role === 'admin' && allowed.includes('user'))
 }
 
 /**

@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api-config";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,12 @@ interface KbSource {
   text?: string;
   label?: string;
   assetId?: string;
+
+  // Dynamic Scraper States
+  scrapingStatus?: string;
+  scrapingProgress?: number;
+  scrapingError?: string;
+  activeJobId?: string | null;
 }
 
 interface Agent {
@@ -54,6 +61,7 @@ interface Agent {
   status: "active" | "paused";
   created_at?: string;
   pipeline?: string;
+  phoneNumber?: string;
 }
 
 interface ChatMessage {
@@ -99,6 +107,11 @@ const MODEL_OPTIONS = [
   { value: "sonar-small-online", label: "Sonar Small",       badge: "Online / Search", provider: "Perplexity", logo: "https://img.icons8.com/ios-filled/50/perplexity-ai.png" },
   { value: "sonar-medium-online",label: "Sonar Medium",      badge: "Fast / Smart",  provider: "Perplexity", logo: "https://img.icons8.com/ios-filled/50/perplexity-ai.png" },
 
+  // Mistral AI
+  { value: "mistral-large-latest", label: "Mistral Large",   badge: "Enterprise / Smart", provider: "Mistral", logo: "https://img.icons8.com/ios-filled/50/wind.png" },
+  { value: "mistral-small-latest", label: "Mistral Small",   badge: "Cost-Effective",     provider: "Mistral", logo: "https://img.icons8.com/ios-filled/50/wind.png" },
+  { value: "open-mixtral-8x7b",    label: "Mixtral 8x7B",    badge: "Fast Open Weights",  provider: "Mistral", logo: "https://img.icons8.com/ios-filled/50/wind.png" },
+
   // DeepSeek
   { value: "deepseek-chat",      label: "DeepSeek Chat",     badge: "Efficiency",    provider: "DeepSeek", logo: "https://img.icons8.com/ios-filled/50/deepseek.png" },
   { value: "deepseek-coder",     label: "DeepSeek Coder",    badge: "Logic",         provider: "DeepSeek", logo: "https://img.icons8.com/ios-filled/50/deepseek.png" },
@@ -108,6 +121,11 @@ const MODEL_OPTIONS = [
 
   // Jasper AI
   { value: "jasper-ai",          label: "Jasper AI",         badge: "Marketing",   provider: "Jasper AI", logo: "https://img.icons8.com/ios-filled/50/jasper-ai.png" },
+
+  // OpenRouter (Cost-Cutting)
+  { value: "openrouter/google/gemini-flash-1.5",           label: "Gemini 1.5 Flash (OpenRouter)",   badge: "Recommended / Cheap", provider: "OpenRouter", logo: "https://img.icons8.com/ios-glyphs/30/bard.png" },
+  { value: "openrouter/meta-llama/llama-3.1-8b-instruct",  label: "Llama 3.1 8B (OpenRouter)",       badge: "Almost Free",         provider: "OpenRouter", logo: "https://img.icons8.com/ios-filled/50/meta.png" },
+  { value: "openrouter/deepseek/deepseek-chat",            label: "DeepSeek V2.5 (OpenRouter)",      badge: "Elite / Cheap",       provider: "OpenRouter", logo: "https://img.icons8.com/ios-filled/50/deepseek.png" },
 ];
 
 const PIPELINE_OPTIONS = [
@@ -140,6 +158,7 @@ export default function AIAgentsPage() {
 
   const [isCreating, setIsCreating] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Form fields
@@ -147,8 +166,10 @@ export default function AIAgentsPage() {
   const [role, setRole] = useState("");
   const [instructions, setInstructions] = useState("");
   const [tone, setTone] = useState("Professional");
-  const [model, setModel] = useState("gemini-1-5-flash");
+  const [model, setModel] = useState("mistral-large-latest");
   const [pipeline, setPipeline] = useState("Default Pipeline");
+  const [phoneNumber, setPhoneNumber] = useState("all");
+  const [availableNumbers, setAvailableNumbers] = useState<{ value: string; label: string }[]>([]);
 
   // KB state
   const [kbOpen, setKbOpen] = useState(false);
@@ -164,6 +185,43 @@ export default function AIAgentsPage() {
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
+  async function loadPhoneNumbers() {
+    try {
+      const numbers: { value: string; label: string }[] = [{ value: "all", label: "📱 All Numbers (Default)" }];
+      
+      // Fetch Meta config
+      try {
+        const metaConfig = await apiFetch("/api/whatsapp/config");
+        if (metaConfig && metaConfig.display_phone_number) {
+          numbers.push({
+            value: metaConfig.display_phone_number.replace(/[^\d]/g, ""),
+            label: `🏢 Meta Account: +${metaConfig.display_phone_number}`
+          });
+        }
+      } catch (e) {
+        console.log("No Meta number connected.");
+      }
+      
+      // Fetch QR sessions
+      try {
+        const qrSessions = await apiFetch("/api/whatsapp/qr");
+        const activeQr = qrSessions?.find((s: any) => s.status === 'connected');
+        if (activeQr && activeQr.phone_number) {
+          numbers.push({
+            value: activeQr.phone_number.replace(/[^\d]/g, ""),
+            label: `🔗 QR Connection: +${activeQr.phone_number}`
+          });
+        }
+      } catch (e) {
+        console.log("No QR number connected.");
+      }
+      
+      setAvailableNumbers(numbers);
+    } catch (err) {
+      console.error("Failed to load active phone numbers:", err);
+    }
+  }
+
   async function loadAgents() {
     setLoading(true); setLoadError("");
     try {
@@ -171,9 +229,10 @@ export default function AIAgentsPage() {
       const localExtras = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("ai_agents_extras") || "{}") : {};
       const merged = data.map((a: Agent) => ({
         ...a,
-        model: localExtras[a.id]?.model ?? a.model ?? "gemini-1-5-flash",
+        model: localExtras[a.id]?.model ?? a.model ?? "mistral-large-latest",
         pipeline: localExtras[a.id]?.pipeline ?? a.pipeline ?? "Default Pipeline",
-        kbSources: localExtras[a.id]?.kbSources ?? a.kbSources ?? []
+        kbSources: (a.kbSources?.length ? a.kbSources : localExtras[a.id]?.kbSources) ?? [],
+        phoneNumber: a.phoneNumber ?? "all"
       }));
       setAgents(merged);
       if (merged.length > 0) {
@@ -190,7 +249,10 @@ export default function AIAgentsPage() {
 
   const [globalKbItems, setGlobalKbItems] = useState<any[]>([]);
 
-  useEffect(() => { loadAgents(); }, []);
+  useEffect(() => { 
+    loadAgents(); 
+    loadPhoneNumbers();
+  }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatHistory, isTyping]);
 
   useEffect(() => {
@@ -206,6 +268,125 @@ export default function AIAgentsPage() {
     }
     loadGlobalKb();
   }, []);
+
+  const getSourceScrapeProgressMessage = (status?: string, progress?: number, error?: string) => {
+    switch (status) {
+      case "queued": return "Queueing website scraping task...";
+      case "scraping": return "Initializing browser, downloading HTML code...";
+      case "processing": return "Cleaning HTML clutter, parsing semantic text blocks...";
+      case "embedding": return `Calculating AI vector matrices (${progress ?? 0}%)...`;
+      case "completed": return "Website successfully ingested and vectorized!";
+      case "failed": return `Scraping failed: ${error || "Unknown error"}`;
+      default: return "Scraping...";
+    }
+  };
+
+  async function handleScrapeWebsite(sourceId: string, url: string, label: string) {
+    if (!url.trim()) {
+      toast("Please enter a target website URL", "error");
+      return;
+    }
+
+    try {
+      new URL(url); // Basic URL format check
+    } catch {
+      toast("Please enter a valid URL (including http:// or https://)", "error");
+      return;
+    }
+
+    updateKbSource(sourceId, {
+      scrapingStatus: "queued",
+      scrapingProgress: 5,
+      scrapingError: ""
+    });
+
+    try {
+      const res = await apiFetch("/api/scrape", {
+        method: "POST",
+        body: JSON.stringify({
+          url: url.trim(),
+          label: label.trim() || undefined,
+        }),
+      });
+
+      if (res && res.jobId) {
+        updateKbSource(sourceId, {
+          activeJobId: res.jobId,
+          scrapingStatus: res.status || "queued"
+        });
+        toast("Website scraping background task started!", "success");
+      } else {
+        throw new Error("Invalid response received from scraping service.");
+      }
+    } catch (err: any) {
+      updateKbSource(sourceId, {
+        scrapingStatus: "failed",
+        scrapingProgress: 0,
+        scrapingError: err.message || "Failed to start scraping."
+      });
+      toast(err.message || "Failed to trigger scrape operation.", "error");
+    }
+  }
+
+  // Poll scraping progress for any active scraper jobs in kbSources
+  useEffect(() => {
+    const activeJobs = kbSources.filter(s => s.activeJobId && s.scrapingStatus !== "completed" && s.scrapingStatus !== "failed");
+    if (activeJobs.length === 0) return;
+
+    const interval = setInterval(async () => {
+      for (const job of activeJobs) {
+        try {
+          const data = await apiFetch(`/api/scrape/status/${job.activeJobId}`);
+          if (data) {
+            if (data.status === "completed") {
+              toast("Website successfully scraped and trained! ✓", "success");
+              
+              // 1. Reload global KB items
+              let freshKbItems: any[] = [];
+              try {
+                const freshData = await apiFetch("/api/knowledge");
+                if (freshData && Array.isArray(freshData)) {
+                  setGlobalKbItems(freshData);
+                  freshKbItems = freshData;
+                }
+              } catch (e) {
+                console.error("Failed to reload KB items:", e);
+              }
+
+              // 2. Find the asset that was created
+              const matchingAsset = freshKbItems.find((item: any) => item.sourceUrl === job.url || item.title === job.url || item.title === job.label);
+              
+              // 3. Convert source to existing_asset type
+              updateKbSource(job.id, {
+                type: "existing_asset",
+                assetId: matchingAsset?.id || job.activeJobId,
+                label: matchingAsset?.title || job.label || "Linked Scraping Asset",
+                scrapingStatus: "completed",
+                activeJobId: null,
+                scrapingProgress: 100
+              });
+            } else if (data.status === "failed") {
+              updateKbSource(job.id, {
+                scrapingStatus: "failed",
+                activeJobId: null,
+                scrapingError: data.error_message || "Website scraping failed."
+              });
+              toast(data.error_message || "Scraping failed.", "error");
+            } else {
+              updateKbSource(job.id, {
+                scrapingStatus: data.status,
+                scrapingProgress: data.progress
+              });
+            }
+          }
+        } catch (err: any) {
+          console.error("Error polling scrape status for source:", job.id, err);
+        }
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [kbSources]);
 
   // ── KB helpers ────────────────────────────────────────────────────────────
 
@@ -268,7 +449,8 @@ export default function AIAgentsPage() {
   function resetForm() {
     setEditingAgent(null);
     setName(""); setRole(""); setInstructions(""); setTone("Professional");
-    setModel("gemini-1-5-flash"); setPipeline("Default Pipeline"); setKbSources([]); setKbOpen(false); setAddKbType("");
+    setModel("mistral-large-latest"); setPipeline("Default Pipeline"); setKbSources([]); setKbOpen(false); setAddKbType("");
+    setPhoneNumber("all");
   }
 
   async function handleSaveAgent() {
@@ -277,7 +459,7 @@ export default function AIAgentsPage() {
       return;
     }
     setSaving(true);
-    const payload = { name, role, instructions, tone, model, kbSources };
+    const payload = { name, role, instructions, tone, model, kbSources, phoneNumber };
     try {
       if (editingAgent) {
         const updated = await apiFetch(`/api/ai-agents/${editingAgent.id}`, {
@@ -286,7 +468,7 @@ export default function AIAgentsPage() {
         const localExtras = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("ai_agents_extras") || "{}") : {};
         localExtras[editingAgent.id] = { model, pipeline, kbSources };
         if (typeof window !== "undefined") localStorage.setItem("ai_agents_extras", JSON.stringify(localExtras));
-        const fullUpdated = { ...updated, model, pipeline, kbSources };
+        const fullUpdated = { ...updated, model, pipeline, kbSources, phoneNumber };
 
         setAgents(prev => prev.map(a => a.id === editingAgent.id ? fullUpdated : a));
         if (sandboxAgentId === editingAgent.id)
@@ -299,7 +481,7 @@ export default function AIAgentsPage() {
         const localExtras = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("ai_agents_extras") || "{}") : {};
         localExtras[created.id] = { model, pipeline, kbSources };
         if (typeof window !== "undefined") localStorage.setItem("ai_agents_extras", JSON.stringify(localExtras));
-        const fullCreated = { ...created, model, pipeline, kbSources };
+        const fullCreated = { ...created, model, pipeline, kbSources, phoneNumber };
 
         setAgents(prev => [fullCreated, ...prev]);
         if (!sandboxAgentId) {
@@ -320,10 +502,11 @@ export default function AIAgentsPage() {
     setEditingAgent(agent);
     setName(agent.name); setRole(agent.role);
     setInstructions(agent.instructions); setTone(agent.tone);
-    setModel(agent.model ?? "gemini-1-5-flash");
+    setModel(agent.model ?? "mistral-large-latest");
     setPipeline(agent.pipeline ?? "Default Pipeline");
     setKbSources(agent.kbSources ?? []);
     setKbOpen((agent.kbSources ?? []).length > 0);
+    setPhoneNumber(agent.phoneNumber ?? "all");
     setIsCreating(true);
   }
 
@@ -491,7 +674,22 @@ export default function AIAgentsPage() {
                         </SelectTrigger>
                         <SelectContent className={cn(selectContentClass, "max-h-[320px]")} side="bottom">
                           <div className="px-2 pt-2 pb-1">
-                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">Google (Default)</p>
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#22C55E]">🌪️ Mistral (Default)</p>
+                          </div>
+                          {MODEL_OPTIONS.filter(m => m.provider === "Mistral").map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
+                              <div className="flex items-center justify-between w-full gap-6">
+                                <div className="flex items-center gap-2">
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
+                                  <span>{opt.label}</span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#D1FAE5] dark:bg-[#064E3B] text-[#047857] dark:text-[#34D399]">{opt.badge}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+
+                          <div className="px-2 pt-3 pb-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#6B7280] dark:text-[#9CA3AF]">Google</p>
                           </div>
                           {MODEL_OPTIONS.filter(m => m.provider === "Google").map(opt => (
                             <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
@@ -606,12 +804,39 @@ export default function AIAgentsPage() {
                               </div>
                             </SelectItem>
                           ))}
+
+                          <div className="px-2 pt-3 pb-1">
+                            <p className="text-[9px] font-bold uppercase tracking-wider text-[#22C55E]">🌪️ OpenRouter (Cost-Cutting)</p>
+                          </div>
+                          {MODEL_OPTIONS.filter(m => m.provider === "OpenRouter").map(opt => (
+                            <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>
+                              <div className="flex items-center justify-between w-full gap-6">
+                                <div className="flex items-center gap-2">
+                                  {opt.logo && <img src={opt.logo} alt="" className="w-4 h-4 shrink-0 object-contain rounded bg-white p-0.5" />}
+                                  <span>{opt.label}</span>
+                                </div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#D1FAE5] dark:bg-[#064E3B] text-[#047857] dark:text-[#34D399]">{opt.badge}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
-
-
+                  <div className="space-y-1.5">
+                    <Label className={labelClass}>Targeted Phone Number</Label>
+                    <Select value={phoneNumber} onValueChange={setPhoneNumber}>
+                      <SelectTrigger className={selectTriggerClass}><SelectValue /></SelectTrigger>
+                      <SelectContent className={selectContentClass}>
+                        {availableNumbers.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value} className={selectItemClass}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-[#6B7280] dark:text-[#9CA3AF] mt-0.5">
+                      Direct this AI Agent to reply only when messages are received on this specific phone number.
+                    </p>
+                  </div>
 
                   <div className="space-y-1.5">
                     <Label className={labelClass}>Instructions (System Prompt)</Label>
@@ -756,20 +981,55 @@ export default function AIAgentsPage() {
 
                                             {/* Website URL */}
                                             {source.type === "website_url" && (
-                                              <div className="flex gap-2">
-                                                <Input
-                                                  placeholder="https://yourwebsite.com/about"
-                                                  value={source.url ?? ""}
-                                                  onChange={e => updateKbSource(source.id, { url: e.target.value })}
-                                                  className={`${innerFieldClass} h-9 text-xs flex-1`}
-                                                />
-                                                <Button
-                                                  type="button"
-                                                  size="sm"
-                                                  className="h-9 px-3 bg-[#22C55E]/10 text-[#22C55E] hover:bg-[#22C55E]/20 font-bold text-xs rounded-lg shrink-0"
-                                                >
-                                                  <Globe className="w-3.5 h-3.5 mr-1.5" /> Scrape
-                                                </Button>
+                                              <div className="space-y-3">
+                                                {(!source.scrapingStatus || source.scrapingStatus === "idle") ? (
+                                                  <div className="flex gap-2">
+                                                    <Input
+                                                      placeholder="https://yourwebsite.com/about"
+                                                      value={source.url ?? ""}
+                                                      onChange={e => updateKbSource(source.id, { url: e.target.value })}
+                                                      className={`${innerFieldClass} h-9 text-xs flex-1`}
+                                                    />
+                                                    <Button
+                                                      type="button"
+                                                      size="sm"
+                                                      onClick={() => handleScrapeWebsite(source.id, source.url ?? "", source.label ?? "")}
+                                                      className="h-9 px-3 bg-[#22C55E]/10 text-[#22C55E] hover:bg-[#22C55E]/20 font-bold text-xs rounded-lg shrink-0"
+                                                    >
+                                                      <Globe className="w-3.5 h-3.5 mr-1.5" /> Scrape
+                                                    </Button>
+                                                  </div>
+                                                ) : source.scrapingStatus === "failed" ? (
+                                                  <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 rounded-xl p-4 space-y-3">
+                                                    <p className="text-xs font-semibold text-red-600 dark:text-red-400">
+                                                      {getSourceScrapeProgressMessage(source.scrapingStatus, source.scrapingProgress, source.scrapingError)}
+                                                    </p>
+                                                    <Button
+                                                      type="button"
+                                                      size="sm"
+                                                      onClick={() => updateKbSource(source.id, { scrapingStatus: "idle", scrapingProgress: 0, scrapingError: "" })}
+                                                      className="h-8 px-3 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-bold text-xs rounded-lg animate-pulse"
+                                                    >
+                                                      Retry Scraping
+                                                    </Button>
+                                                  </div>
+                                                ) : (
+                                                  <div className="bg-[#F9FAFB] dark:bg-[#0B0F1A] border border-[#E5E7EB] dark:border-[#1F2937] rounded-xl p-4 space-y-3">
+                                                    <div className="flex items-center justify-between text-[10px] font-bold text-[#111827] dark:text-[#F9FAFB] uppercase tracking-wider">
+                                                      <span>Scraping Website...</span>
+                                                      <Loader2 className="w-3.5 h-3.5 text-[#22C55E] animate-spin" />
+                                                    </div>
+                                                    <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2 overflow-hidden">
+                                                      <div 
+                                                        className="bg-[#22C55E] h-2 rounded-full transition-all duration-500 ease-out" 
+                                                        style={{ width: `${source.scrapingProgress ?? 0}%` }}
+                                                      />
+                                                    </div>
+                                                    <p className="text-[10px] font-semibold text-[#6B7280] dark:text-[#9CA3AF]">
+                                                      {getSourceScrapeProgressMessage(source.scrapingStatus, source.scrapingProgress)}
+                                                    </p>
+                                                  </div>
+                                                )}
                                               </div>
                                             )}
 
@@ -1027,7 +1287,7 @@ export default function AIAgentsPage() {
                               className="h-8 w-8 p-0 text-[#6B7280] dark:text-[#9CA3AF] hover:text-[#22C55E] rounded-xl hover:bg-[#22C55E]/10">
                               <Edit3 className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteAgent(agent.id)}
+                            <Button variant="ghost" size="sm" onClick={() => setDeletingAgent(agent)}
                               className="h-8 w-8 p-0 text-[#6B7280] dark:text-[#9CA3AF] hover:text-red-500 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/10">
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -1157,6 +1417,20 @@ export default function AIAgentsPage() {
           </div>
         </div>
       </div>
+
+      {deletingAgent && (
+        <ConfirmDeleteDialog
+          open={!!deletingAgent}
+          onOpenChange={(open) => !open && setDeletingAgent(null)}
+          title={`Delete AI Agent "${deletingAgent.name}"?`}
+          description="This will permanently delete this AI agent and its configuration. This agent will no longer be available to handle any automated chats."
+          onConfirm={async () => {
+            await handleDeleteAgent(deletingAgent.id);
+            setDeletingAgent(null);
+          }}
+          trigger={<span className="hidden" />}
+        />
+      )}
     </div>
   );
 }

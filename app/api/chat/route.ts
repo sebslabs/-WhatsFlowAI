@@ -1,59 +1,101 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { AIGateway } from '@/services/ai-gateway';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 
-export const runtime = 'edge';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const adminSupabase = createServiceClient(supabaseUrl, supabaseKey);
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = createClient();
+
+    // 1. Authenticate user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // 2. Fetch tenant context (organization_id)
+    const { data: profile, error: profileError } = await adminSupabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile || !profile.organization_id) {
+      return new Response(JSON.stringify({ error: 'Tenant context mismatch or forbidden' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     const { messages } = await req.json();
 
-    if (!messages || !Array.isArray(messages)) {
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: 'Messages array is required.' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'Groq API Key is not configured.' }), {
-        status: 500,
+    // Extract the latest user message and history
+    const userMessages = messages.filter((m: any) => m.role === 'user');
+    const lastUserMessage = userMessages[userMessages.length - 1];
+    
+    if (!lastUserMessage || !lastUserMessage.content) {
+      return new Response(JSON.stringify({ error: 'No user message content found.' }), {
+        status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    const payload = {
-      messages,
-      model: "qwen/qwen3-32b",
-      temperature: 0.6,
-      max_completion_tokens: 4096,
-      top_p: 0.95,
-      stream: true,
-      reasoning_effort: "default",
-      stop: null
-    };
+    const history = messages
+      .slice(0, messages.length - 1)
+      .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+      .map((m: any) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content as string,
+      }));
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(payload),
+    // 3. Route through AIGateway (handles prompt injection, RAG, and Rate Limits)
+    const aiResponse = await AIGateway.generateResponse({
+      message: lastUserMessage.content,
+      systemPrompt: 'You are a helpful customer support assistant for WhatsFlow.',
+      history,
+      tenantId: profile.organization_id,
+      userId: user.id,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Groq API Error:', errorText);
-      return new Response(JSON.stringify({ error: `Groq API responded with error: ${response.statusText}` }), {
-        status: response.status,
+    if (!aiResponse.success) {
+      return new Response(JSON.stringify({ error: aiResponse.error || 'AI request blocked or rate-limited.' }), {
+        status: aiResponse.blockedByGuard ? 400 : 429,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // Transform stream to pass-through
-    const readableStream = response.body;
-    
-    return new Response(readableStream, {
+    // 4. Construct a Server-Sent Events (SSE) stream compatible with the chat UI
+    const text = aiResponse.text;
+    const encoder = new TextEncoder();
+    const customStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+          choices: [{
+            delta: { content: text },
+            finish_reason: 'stop',
+            index: 0
+          }]
+        })}\n\n`));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      }
+    });
+
+    return new Response(customStream, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',

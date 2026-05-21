@@ -13,6 +13,7 @@ import {
   Zap,
   X,
   BellRing,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNotificationsContext } from "@/context/NotificationsContext";
@@ -25,33 +26,38 @@ const typeConfig: Record<
 > = {
   new_lead: {
     icon: <User className="w-3.5 h-3.5" />,
-    color: "text-green-600",
-    bg: "bg-green-100",
+    color: "text-green-600 dark:text-green-400",
+    bg: "bg-green-100 dark:bg-green-900/30",
   },
   booked: {
     icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-    color: "text-[#16A34A]",
-    bg: "bg-green-100",
+    color: "text-[#16A34A] dark:text-[#22C55E]",
+    bg: "bg-green-100 dark:bg-green-900/30",
   },
   attention: {
     icon: <AlertTriangle className="w-3.5 h-3.5" />,
-    color: "text-orange-600",
-    bg: "bg-orange-100",
+    color: "text-orange-600 dark:text-orange-400",
+    bg: "bg-orange-100 dark:bg-orange-900/30",
   },
   ai_paused: {
     icon: <PauseCircle className="w-3.5 h-3.5" />,
-    color: "text-yellow-600",
-    bg: "bg-yellow-100",
+    color: "text-yellow-600 dark:text-yellow-400",
+    bg: "bg-yellow-100 dark:bg-yellow-900/30",
   },
   summary: {
     icon: <BarChart3 className="w-3.5 h-3.5" />,
-    color: "text-blue-600",
-    bg: "bg-blue-100",
+    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-blue-100 dark:bg-blue-900/30",
   },
   system: {
     icon: <Zap className="w-3.5 h-3.5" />,
-    color: "text-gray-600",
-    bg: "bg-gray-100",
+    color: "text-gray-600 dark:text-gray-400",
+    bg: "bg-gray-100 dark:bg-gray-800",
+  },
+  whatsapp_message: {
+    icon: <MessageCircle className="w-3.5 h-3.5" />,
+    color: "text-[#16A34A] dark:text-[#22C55E]",
+    bg: "bg-green-100 dark:bg-green-900/30",
   },
 };
 
@@ -108,7 +114,7 @@ export function NotificationDropdown() {
 
   const filteredNotifications = notifications.filter((n) => {
     if (tab === "unread") return !n.read;
-    if (tab === "leads") return ["new_lead", "booked", "attention"].includes(n.type);
+    if (tab === "leads") return ["new_lead", "booked", "attention", "whatsapp_message"].includes(n.type);
     if (tab === "system") return ["ai_paused", "summary", "system"].includes(n.type);
     return true;
   });

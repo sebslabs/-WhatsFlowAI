@@ -186,8 +186,9 @@ export interface BillingSubscription {
   id: string
   tenant_id: string
   plan: TenantPlanType
-  stripe_customer_id: string | null
-  stripe_subscription_id: string | null
+  paddle_customer_id: string | null
+  paddle_subscription_id: string | null
+  paddle_price_id: string | null
   status: SubscriptionStatusType
   current_period_end: string | null
   created_at: string

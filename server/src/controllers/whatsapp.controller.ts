@@ -72,11 +72,15 @@ export class WhatsAppController {
         phone_number_id,
         business_account_id,
         access_token,
+        webhook_verify_token,
+        verify_token,
         display_name,
       } = req.body as {
         phone_number_id:      string
         business_account_id:  string
         access_token:         string
+        webhook_verify_token?: string
+        verify_token?:        string
         display_name?:        string
       }
 
@@ -98,18 +102,21 @@ export class WhatsAppController {
         return
       }
 
-      // Upsert into whatsapp_accounts (correct table)
+      // Upsert into whatsapp_accounts (aligned with production schema)
       const { data, error } = await adminDb
-        .from('whatsapp_accounts')      // ← FIXED: was whatsapp_integrations
+        .from('whatsapp_accounts')      
         .upsert(
           {
-            tenant_id:            tenantId,
+            tenant_id:              tenantId,
             phone_number_id,
-            waba_id:              business_account_id,
-            access_token:         encryptedToken,
-            display_name:         display_name ?? null,
-            status:               'connected',
-            updated_at:           new Date().toISOString(),
+            business_account_id,
+            encrypted_access_token: encryptedToken,
+            status:                 'connected',
+            metadata: {
+              verify_token:         verify_token || webhook_verify_token || 'whatsflow_default_verify',
+              display_name:         display_name ?? null,
+            },
+            updated_at:             new Date().toISOString(),
           },
           { onConflict: 'phone_number_id' }
         )
@@ -140,13 +147,34 @@ export class WhatsAppController {
       const { tenantId } = req.user!   // ← FIXED: was organizationId
 
       const { data, error } = await adminDb
-        .from('whatsapp_accounts')     // ← FIXED: was whatsapp_integrations
-        .select('phone_number_id, display_name, status, updated_at, waba_id')
+        .from('whatsapp_accounts')     
+        .select('phone_number_id, business_account_id, status, updated_at, metadata')
         .eq('tenant_id', tenantId)
         .maybeSingle()
 
       if (error) throw error
-      res.json(data ?? { status: 'disconnected' })
+
+      const host = req.get('host')
+      const proto = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'
+      const webhook_url = `${proto}://${host}/api/whatsapp/webhook?tenantId=${tenantId}`
+
+      if (!data) {
+        res.json({ status: 'disconnected', webhook_url })
+        return
+      }
+
+      const meta = typeof data.metadata === 'object' ? data.metadata : {}
+
+      res.json({
+        phone_number_id: data.phone_number_id,
+        waba_id: data.business_account_id,
+        status: data.status,
+        updated_at: data.updated_at,
+        // SECURITY FIX (CRITICAL #3): Return null instead of a predictable default verify token.
+        verify_token: (meta as any)?.verify_token || null,
+        display_name: (meta as any)?.display_name || null,
+        webhook_url
+      })
     } catch (err) {
       logger.error('[whatsapp] getConfig failed', { err: (err as Error).message })
       res.status(500).json({ error: 'Failed to retrieve WhatsApp config' })
@@ -161,21 +189,51 @@ export class WhatsAppController {
     const mode      = req.query['hub.mode']
     const token     = req.query['hub.verify_token']
     const challenge = req.query['hub.challenge']
+    const tenantId  = req.query['tenantId'] as string | undefined
 
-    const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN
-    if (!VERIFY_TOKEN) {
-      logger.error('[whatsapp-verify] WHATSAPP_VERIFY_TOKEN not configured')
+    // SECURITY FIX (CRITICAL #3): In production, fail if no verify token is configured.
+    // An unconfigured env var means webhook handshakes cannot be securely validated.
+    const envVerifyToken = process.env.WHATSAPP_VERIFY_TOKEN || process.env.META_VERIFY_TOKEN
+    if (process.env.NODE_ENV === 'production' && !envVerifyToken && !tenantId) {
+      logger.error('[whatsapp-verify] WHATSAPP_VERIFY_TOKEN / META_VERIFY_TOKEN not set — rejecting handshake in production')
       res.sendStatus(503)
       return
     }
 
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      logger.info('[whatsapp-verify] Meta webhook handshake validated')
+    let verifyToken = envVerifyToken
+
+    // Multi-tenant lookup: If tenantId query param is present, resolve their custom token
+    if (tenantId) {
+      try {
+        const { data } = await adminDb
+          .from('whatsapp_accounts')
+          .select('verify_token')
+          .eq('tenant_id', tenantId)
+          .maybeSingle()
+
+        if (data?.verify_token) {
+          verifyToken = data.verify_token
+        } else {
+          logger.warn('[whatsapp-verify] Tenant requested webhook handshake but no custom verify token saved', { tenantId })
+        }
+      } catch (err) {
+        logger.error('[whatsapp-verify] Database lookup failed during handshake', { tenantId, err: (err as Error).message })
+      }
+    }
+
+    if (!verifyToken) {
+      logger.error('[whatsapp-verify] Neither global nor tenant-specific verify token is configured')
+      res.sendStatus(503)
+      return
+    }
+
+    if (mode === 'subscribe' && token === verifyToken) {
+      logger.info('[whatsapp-verify] Meta webhook handshake validated', { tenantId: tenantId ?? 'global' })
       res.status(200).send(challenge)
       return
     }
 
-    logger.warn('[whatsapp-verify] Handshake rejected — token mismatch')
+    logger.warn('[whatsapp-verify] Handshake rejected — token mismatch', { tenantId: tenantId ?? 'global' })
     res.sendStatus(403)
   }
 
@@ -216,9 +274,10 @@ export class WhatsAppController {
       // ── Inbound message ────────────────────────────────────────────────────
       if (messages?.length) {
         const message = messages[0] as Record<string, unknown>
-        let tenantId: string | undefined
+        let tenantId: string | undefined = req.query.tenantId as string | undefined
 
-        if (phoneNumberId) {
+        // Fallback to resolving tenant via phone_number_id if not directly passed in callback query param
+        if (!tenantId && phoneNumberId) {
           tenantId = await resolveTenantFromPhoneNumberId(phoneNumberId) ?? undefined
         }
 

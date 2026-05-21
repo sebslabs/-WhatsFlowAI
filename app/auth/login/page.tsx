@@ -146,28 +146,6 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="mt-6 p-4 bg-[#f0fdf4]/60 border border-[#e2ede2] rounded-2xl text-xs text-slate-600 flex items-center justify-between">
-              <div>
-                <p className="font-bold text-[#16a34a] flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
-                  Testing Workspace Account
-                </p>
-                <p className="mt-1 font-medium">Email: <span className="text-[#0f172a] font-semibold select-all">test@whatsflowai.online</span></p>
-                <p className="font-medium">Password: <span className="text-[#0f172a] font-semibold select-all">Test@12</span></p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setEmail("test@whatsflowai.online");
-                  setPassword("Test@12");
-                }}
-                className="h-8 text-xs font-black text-[#16a34a] border-[#bbf7d0] bg-white hover:bg-[#bbf7d0]/20 rounded-xl px-3 transition-colors"
-              >
-                Autofill
-              </Button>
-            </div>
           </div>
 
           <p className="text-center mt-8 text-sm text-[#64748b]">

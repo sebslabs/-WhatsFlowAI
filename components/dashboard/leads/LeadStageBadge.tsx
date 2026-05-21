@@ -17,11 +17,20 @@ interface Props {
 }
 
 export function LeadStageBadge({ stage, className }: Props) {
+  const norm = stage?.toLowerCase() || "";
+  let style = STAGE_STYLES.New;
+  if (norm === "contacted") style = STAGE_STYLES.Contacted;
+  else if (norm === "qualifying") style = STAGE_STYLES.Qualifying;
+  else if (norm === "qualified") style = STAGE_STYLES.Qualified;
+  else if (norm === "proposal") style = STAGE_STYLES.Proposal;
+  else if (norm === "booked") style = STAGE_STYLES.Booked;
+  else if (norm === "lost") style = STAGE_STYLES.Lost;
+
   return (
     <span
       className={cn(
         "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider whitespace-nowrap",
-        STAGE_STYLES[stage] || STAGE_STYLES.New,
+        style,
         className
       )}
     >

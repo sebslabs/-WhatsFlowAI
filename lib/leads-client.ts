@@ -1,4 +1,5 @@
 import type { Lead, LeadFormData, LeadStage, LeadUrgency } from '@/types/index'
+import { createClient } from './supabase/client';
 
 /** Row shape returned by GET /api/leads (Supabase column names). */
 export type ApiLeadRow = {
@@ -57,22 +58,45 @@ async function parseError(res: Response): Promise<string> {
   return res.statusText || 'Request failed'
 }
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) {
+      return { Authorization: `Bearer ${session.access_token}` }
+    }
+  } catch {
+    console.warn('[leads-client] Could not read session for Authorization header')
+  }
+  return {}
+}
+
 /**
- * Cookie-authenticated calls to Next.js App Router `/api/leads`.
- * Do not send Bearer tokens — `requireAuthApi` uses `getUser()` from cookies.
+ * Cookie and Bearer Token authenticated calls to Next.js App Router `/api/leads`.
+ * Passes the Bearer token explicitly to synchronize context with the stateless backend.
  */
 export async function fetchLeadsList(): Promise<Lead[]> {
-  const res = await fetch('/api/leads', { credentials: 'include' })
+  const authHeaders = await getAuthHeaders()
+  const res = await fetch('/api/leads', { 
+    credentials: 'include',
+    headers: {
+      ...authHeaders,
+    }
+  })
   if (!res.ok) throw new Error(await parseError(res))
   const rows = (await res.json()) as ApiLeadRow[]
   return Array.isArray(rows) ? rows.map(mapApiLeadToLead) : []
 }
 
 export async function createLeadApi(data: LeadFormData): Promise<Lead> {
+  const authHeaders = await getAuthHeaders()
   const res = await fetch('/api/leads', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
     body: JSON.stringify(formToCreateBody(data)),
   })
   if (!res.ok) throw new Error(await parseError(res))
@@ -81,10 +105,14 @@ export async function createLeadApi(data: LeadFormData): Promise<Lead> {
 }
 
 export async function updateLeadApi(id: string, data: LeadFormData): Promise<Lead> {
+  const authHeaders = await getAuthHeaders()
   const res = await fetch('/api/leads', {
     method: 'PATCH',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
     body: JSON.stringify({
       id,
       name: data.name.trim(),
@@ -102,18 +130,26 @@ export async function updateLeadApi(id: string, data: LeadFormData): Promise<Lea
 }
 
 export async function deleteLeadApi(id: string): Promise<void> {
+  const authHeaders = await getAuthHeaders()
   const res = await fetch(`/api/leads?id=${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'include',
+    headers: {
+      ...authHeaders,
+    },
   })
   if (!res.ok) throw new Error(await parseError(res))
 }
 
 export async function bulkDeleteLeadsApi(ids: string[]): Promise<void> {
+  const authHeaders = await getAuthHeaders()
   const res = await fetch('/api/leads', {
     method: 'DELETE',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
     body: JSON.stringify({ ids }),
   })
   if (!res.ok) throw new Error(await parseError(res))

@@ -1,6 +1,6 @@
 import { createClient } from './supabase/client';
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+export const API_BASE_URL = '';
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   let authHeader: Record<string, string> = {}
@@ -28,9 +28,9 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   })
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(err.error || `API Error: ${response.statusText}`);
+    const err = await response.json().catch(() => ({ error: response.statusText }))
+    throw new Error(err.error || `API Error: ${response.statusText}`)
   }
 
-  return response.json();
+  return response.json()
 }

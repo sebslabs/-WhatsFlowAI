@@ -61,9 +61,10 @@ export default function AboutPage() {
             <h2 className="text-4xl font-bold text-[#0f172a] mb-16 font-[family-name:var(--font-sora)]">The Minds Behind the Flow</h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-12">
               {[
-                { name: "Achintha S.", role: "Founder & Lead Engineer" },
-                { name: "Sarah M.", role: "Head of AI Design" },
-                { name: "David L.", role: "Customer Success" },
+                { name: "Achintha Randev", role: "Co-Founder & CEO" },
+                { name: "Kevin Rushdi", role: "Co-Founder & COO" },
+                { name: "Thrun De Alwis", role: "CMO" },
+
               ].map((member) => (
                 <div key={member.name} className="group">
                   <div className="w-24 h-24 bg-gray-100 rounded-full mx-auto mb-6 flex items-center justify-center text-[#22c55e]">

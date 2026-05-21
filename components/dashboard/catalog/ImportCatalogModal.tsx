@@ -82,6 +82,12 @@ export function ImportCatalogModal({ open, onClose, onImport }: Props) {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      alert("File size exceeds the 10MB upload limit.");
+      if (e.target) e.target.value = "";
+      return;
+    }
+
     setFile(selectedFile);
     const reader = new FileReader();
     reader.onload = (event) => {

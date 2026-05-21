@@ -334,24 +334,34 @@ export function EditLeadModal({ open, lead, onClose, onSave, stages = STAGES }: 
       </Dialog>
 
       <AlertDialog open={showConfirmCancel} onOpenChange={setShowConfirmCancel}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-500" />
-              Discard changes?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Any unsaved changes will be lost. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep Editing</AlertDialogCancel>
+        <AlertDialogContent className="max-w-[400px] p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-[#111827]">
+          <div className="p-8 flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-full bg-amber-50 dark:bg-amber-900/10 flex items-center justify-center mb-6 animate-in zoom-in duration-300">
+              <AlertCircle className="w-8 h-8 text-amber-500" />
+            </div>
+            
+            <AlertDialogHeader className="space-y-2">
+              <AlertDialogTitle className="text-2xl font-bold text-[#0F1F0F] dark:text-[#F9FAFB]">
+                Discard changes?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-sm text-[#6B7B6B] dark:text-[#9CA3AF] leading-relaxed">
+                Any unsaved changes will be lost. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+          </div>
+
+          <AlertDialogFooter className="p-6 bg-[#F8FAF8] dark:bg-[#0B0F1A] border-t border-[#F0F7F0] dark:border-[#1F2937] flex sm:flex-row gap-3">
+            <AlertDialogCancel 
+              className="flex-1 h-12 rounded-xl border-[#E2EDE2] dark:border-[#1F2937] text-[#6B7B6B] dark:text-[#9CA3AF] font-bold hover:bg-white dark:hover:bg-[#111827] transition-all"
+            >
+              Keep Editing
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 setShowConfirmCancel(false);
                 onClose();
               }}
-              className="bg-red-500 hover:bg-red-600 border-none"
+              className="flex-1 h-12 rounded-xl bg-red-500 text-white hover:bg-red-600 font-bold shadow-lg shadow-red-500/20 active:scale-95 transition-all border-none"
             >
               Discard
             </AlertDialogAction>

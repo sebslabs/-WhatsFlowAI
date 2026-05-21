@@ -232,7 +232,7 @@ export function ConversionByServiceChart({ data = [] }: { data?: { service: stri
 
 export function ResponseTimeChart({ data = [] }: { data?: { date?: string; day?: string; responseTime: number }[] }) {
   return (
-    <div className="bg-white dark:bg-[#111827] rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] shadow-sm p-6 transition-colors duration-300">
+    <div className="bg-white dark:bg-[#111827] rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] shadow-sm p-6 transition-colors duration-300 relative">
       <div className="mb-4">
         <h3 className="font-semibold text-[#111827] dark:text-[#F9FAFB]">
           Response Time Distribution
@@ -279,6 +279,11 @@ export function ResponseTimeChart({ data = [] }: { data?: { date?: string; day?:
           />
         </AreaChart>
       </ResponsiveContainer>
+      {data.length === 0 && (
+         <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-[#111827]/80 rounded-xl z-10">
+             <p className="text-sm font-medium text-[#6B7280] dark:text-[#9CA3AF]">No response time data available</p>
+         </div>
+      )}
     </div>
   );
 }

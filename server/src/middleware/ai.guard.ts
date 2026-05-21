@@ -86,6 +86,109 @@ export class AIGuard {
       }
     }
 
+    // 2.5 SaaS Subscription and AI Usage Management Enforcement
+    try {
+      const { data: sub, error: subError } = await supabase
+        .from('billing_subscriptions')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .maybeSingle()
+
+      if (!subError && sub) {
+        const now = new Date()
+        let updatedStatus = sub.subscription_status
+        let updatedGracePeriodEnd = sub.grace_period_end
+
+        // Determine if yearly (e.g. from price id or yearly plan indicator)
+        const isYearly = sub.paddle_price_id
+          ? sub.paddle_price_id.toLowerCase().includes('annual') || sub.paddle_price_id.toLowerCase().includes('yearly')
+          : false
+
+        // A. Free Trial Expiration Logic
+        if (sub.subscription_status === 'trial') {
+          const trialEnd = sub.trial_end_date ? new Date(sub.trial_end_date) : null
+          if (trialEnd && now > trialEnd) {
+            updatedStatus = 'expired'
+          }
+        }
+        // B. Active Subscription Expiration & Grace Period Logic
+        else if (sub.subscription_status === 'active' || sub.subscription_status === 'grace_period') {
+          const subEnd = sub.subscription_end_date ? new Date(sub.subscription_end_date) : null
+          if (subEnd && now > subEnd) {
+            if (!updatedGracePeriodEnd) {
+              const graceDays = isYearly ? 7 : 3
+              const graceEnd = new Date(subEnd)
+              graceEnd.setDate(graceEnd.getDate() + graceDays)
+              updatedGracePeriodEnd = graceEnd.toISOString()
+              updatedStatus = 'grace_period'
+            } else {
+              const graceEnd = new Date(updatedGracePeriodEnd)
+              if (now > graceEnd) {
+                updatedStatus = 'suspended'
+              } else {
+                updatedStatus = 'grace_period'
+              }
+            }
+          } else {
+            updatedStatus = 'active'
+            updatedGracePeriodEnd = null
+          }
+        }
+
+        // C. AI conversation usage limit expired logic
+        const used = sub.ai_conversation_used || 0
+        const limit = sub.ai_conversation_limit || 1500
+        if (
+          (updatedStatus === 'active' || updatedStatus === 'trial' || updatedStatus === 'grace_period') &&
+          used >= limit
+        ) {
+          updatedStatus = 'limit_reached'
+        } else if (updatedStatus === 'limit_reached' && used < limit) {
+          updatedStatus = sub.paddle_subscription_id ? 'active' : 'trial'
+        }
+
+        // If changes detected, synchronize state
+        if (updatedStatus !== sub.subscription_status || updatedGracePeriodEnd !== sub.grace_period_end) {
+          await supabase
+            .from('billing_subscriptions')
+            .update({
+              subscription_status: updatedStatus,
+              grace_period_end: updatedGracePeriodEnd,
+              updated_at: now.toISOString()
+            })
+            .eq('tenant_id', tenantId)
+
+          // Keep primary tenant active status in sync
+          await supabase
+            .from('tenants')
+            .update({
+              is_active: !['expired', 'suspended'].includes(updatedStatus),
+              updated_at: now.toISOString()
+            })
+            .eq('id', tenantId)
+        }
+
+        // Block if status is expired, suspended, or limit_reached
+        if (['expired', 'suspended', 'limit_reached'].includes(updatedStatus) || used >= limit) {
+          logger.warn('[AIGuard] AI access blocked due to subscription status', {
+            tenantId,
+            status: updatedStatus,
+            used,
+            limit
+          })
+          return {
+            allowed: false,
+            reason: `subscription_${updatedStatus}`,
+            sanitizedMessage: truncatedMsg,
+            truncatedHistory: [],
+          }
+        }
+      }
+    } catch (guardErr: any) {
+      logger.error('[AIGuard] Failed to execute subscription validation guard checks', guardErr)
+    }
+
+
     // 3. Daily token budget check
     const todayStart = new Date()
     todayStart.setUTCHours(0, 0, 0, 0)

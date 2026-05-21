@@ -17,6 +17,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeading } from "@/components/dashboard/PageHeading";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 type TemplateStatus = "APPROVED" | "PENDING" | "REJECTED" | "DRAFT";
 type TemplateCategory = "UTILITY" | "MARKETING" | "AUTHENTICATION";
@@ -97,6 +98,7 @@ export default function TemplatesPage() {
   const [categoryFilter, setCategoryFilter] = useState<TemplateCategory | "all">("all");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WhatsAppTemplate | null>(null);
+  const [deletingTemplate, setDeletingTemplate] = useState<WhatsAppTemplate | null>(null);
 
   useEffect(() => {
     async function loadTemplates() {
@@ -233,11 +235,26 @@ export default function TemplatesPage() {
                 setEditingTemplate(t);
                 setSheetOpen(true);
               }}
-              onDelete={() => handleDelete(t.id)}
+              onDelete={() => setDeletingTemplate(t)}
               onDuplicate={() => handleDuplicate(t)}
             />
           ))}
         </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deletingTemplate && (
+        <ConfirmDeleteDialog
+          open={!!deletingTemplate}
+          onOpenChange={(open) => !open && setDeletingTemplate(null)}
+          title={`Delete Template "${deletingTemplate.name}"?`}
+          description="This action cannot be undone. If this template is actively used in automations, those flows may fail."
+          onConfirm={async () => {
+            await handleDelete(deletingTemplate.id);
+            setDeletingTemplate(null);
+          }}
+          trigger={<span className="hidden" />}
+        />
       )}
 
       {/* Slideout Form Panel */}

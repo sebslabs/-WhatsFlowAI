@@ -10,7 +10,7 @@ import {
   GitBranch, ImageIcon, StopCircle, ArrowLeft, LayoutGrid, Check,
   CreditCard, Sparkles, Webhook, DollarSign, Brain,
   List, Headset, FileSpreadsheet, UserCheck, Menu, Workflow,
-  Loader2,
+  Loader2, Activity,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api-config";
 import { Button } from "@/components/ui/button";
@@ -24,11 +24,12 @@ import { AutomationToggle } from "@/components/dashboard/AutomationToggle";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeading } from "@/components/dashboard/PageHeading";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { useTheme } from "next-themes";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type TriggerType = "first_message" | "keyword" | "any_message" | "button_reply";
+type TriggerType = "first_message" | "keyword" | "any_message" | "button_reply" | "ai_handoff" | "tag_added" | "lead_stage_changed";
 type StepType = "message" | "question" | "buttons" | "tag" | "notify" | "booking" | "delay" | "condition" | "media" | "payment" | "ai_agent" | "webhook" | "list" | "handover" | "sheets" | "end";
 
 interface ButtonOption { id: string; label: string }
@@ -47,6 +48,8 @@ interface FlowStep {
   conditionVariable?: string;
   conditionOperator?: string;
   conditionValue?: string;
+  conditionFalseAction?: "end" | "skip_next" | "jump_to";
+  conditionFalseTargetId?: string;
   // media
   mediaType?: "image" | "video" | "document";
   mediaUrl?: string;
@@ -82,6 +85,30 @@ interface Flow {
   steps: FlowStep[];
 }
 
+interface Settings {
+  ai_enabled: boolean;
+  ai_auto_pipeline: boolean;
+  business_name: string;
+  industry: string;
+  ai_tone: string;
+  escalation_threshold: number;
+  questions: { id: string; text: string }[];
+  reengagement_enabled: boolean;
+  reengagement_window: string;
+  reengagement_message: string;
+  reengagement_cap: number;
+  followup_enabled: boolean;
+  followup_window: string;
+  followup_stages: string[];
+  followup_message: string;
+  booking_url: string;
+  qualification_gate: number;
+  confirmation_message: string;
+  working_hours_enabled: boolean;
+  working_hours: Record<string, { start: string; end: string; active: boolean }>;
+  ooo_message: string;
+}
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const STEP_META: Record<StepType, { icon: React.ElementType; label: string; color: string; bg: string; border: string; darkBg: string; darkBorder: string }> = {
@@ -108,6 +135,9 @@ const TRIGGER_META: Record<TriggerType, { label: string; icon: React.ElementType
   keyword: { label: "Keyword Match", icon: Hash, desc: "Triggers when the message contains a specific word" },
   any_message: { label: "Any Incoming Message", icon: MessageSquare, desc: "Triggers for every incoming WhatsApp message" },
   button_reply: { label: "Button Tap", icon: MousePointer, desc: "Triggers when a lead taps one of your quick reply buttons" },
+  ai_handoff: { label: "AI Handover", icon: Headset, desc: "Triggers when AI assistant cannot answer or requests human intervention" },
+  tag_added: { label: "Tag Added", icon: Tag, desc: "Triggers when a specific tag is attached to a lead" },
+  lead_stage_changed: { label: "Pipeline Stage Changed", icon: Activity, desc: "Triggers when a lead moves to a new pipeline stage" },
 };
 
 // ─── Sample Data ─────────────────────────────────────────────────────────────
@@ -232,15 +262,15 @@ function StepConnector({ onInsert }: { onInsert: () => void }) {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
     >
-      <div className="w-px h-4 bg-[#E2EDE2]" />
+      <div className="w-px h-4 bg-[#E2EDE2] dark:bg-[#1F2937]" />
       <button
         onClick={onInsert}
-        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${hov ? "border-[#16A34A] bg-[#16A34A] text-white shadow-md scale-110" : "border-[#D1D5DB] bg-white text-[#9CA3AF]"
+        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${hov ? "border-[#16A34A] bg-[#16A34A] text-white shadow-md scale-110" : "border-[#D1D5DB] dark:border-[#374151] bg-white dark:bg-[#111827] text-[#9CA3AF]"
           }`}
       >
         <Plus className="w-3 h-3" />
       </button>
-      <div className="w-px h-4 bg-[#E2EDE2]" />
+      <div className="w-px h-4 bg-[#E2EDE2] dark:bg-[#1F2937]" />
     </div>
   );
 }
@@ -253,6 +283,8 @@ function StepCard({
   step: FlowStep; index: number; onUpdate: (s: FlowStep) => void; onDelete: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const m = STEP_META[step.type];
   const Icon = m.icon;
 
@@ -275,12 +307,12 @@ function StepCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className="rounded-2xl border-2 overflow-hidden"
-      style={{ borderColor: m.border }}
+      style={{ borderColor: isDark ? m.darkBorder : m.border }}
     >
       {/* Header */}
       <div
-        className="flex items-center gap-3 px-4 py-3.5 cursor-pointer select-none"
-        style={{ background: m.bg }}
+        className="flex items-center gap-3 px-4 py-3.5 cursor-pointer select-none transition-colors"
+        style={{ background: isDark ? m.darkBg : m.bg }}
         onClick={() => setExpanded(!expanded)}
       >
         <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0" style={{ background: m.color + "22" }}>
@@ -299,7 +331,7 @@ function StepCard({
         </div>
         <button
           onClick={e => { e.stopPropagation(); onDelete(); }}
-          className="p-1.5 rounded-xl text-[#C4C9C4] hover:text-red-500 hover:bg-red-50 transition-all"
+          className="p-1.5 rounded-xl text-[#C4C9C4] dark:text-[#6B7280] hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -316,19 +348,19 @@ function StepCard({
             transition={{ duration: 0.18 }}
             style={{ overflow: "hidden" }}
           >
-            <div className="bg-white dark:bg-[#111827] border-t-2 p-5 space-y-4" style={{ borderColor: m.border }}>
+            <div className="bg-white dark:bg-[#111827] border-t-2 p-5 space-y-4 transition-colors" style={{ borderColor: isDark ? m.darkBorder : m.border }}>
 
               {/* Message text (message / question / buttons) */}
               {(step.type === "message" || step.type === "question" || step.type === "buttons") && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-[#6B7B6B]">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-[#6B7B6B] dark:text-[#9CA3AF]">
                     {step.type === "question" ? "Question Text" : "Message"}
                   </Label>
                   <Textarea
                     value={step.message ?? ""}
                     onChange={e => set("message", e.target.value)}
                     placeholder={step.type === "question" ? "What service are you looking for?" : "Type your message here…"}
-                    className="text-sm resize-none rounded-xl border-[#E2EDE2] p-3"
+                    className="text-sm resize-none rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB] p-3"
                     rows={3}
                   />
                   <p className="text-[10px] text-[#9CA3AF]">Use &#123;name&#125; to personalize the message.</p>
@@ -345,7 +377,7 @@ function StepCard({
                       value={step.variableName ?? ""}
                       onChange={e => set("variableName", e.target.value.replace(/\s/g, "_").toLowerCase())}
                       placeholder="service"
-                      className="h-9 rounded-xl text-sm font-mono"
+                      className="h-9 rounded-xl text-sm font-mono bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB]"
                     />
                     <span className="text-sm font-mono text-[#6B7B6B]">{"}"}</span>
                   </div>
@@ -360,7 +392,7 @@ function StepCard({
                   <div className="space-y-2">
                     {(step.buttons ?? []).map(btn => (
                       <div key={btn.id} className="flex items-center gap-2">
-                        <div className="flex-1 flex items-center gap-2 bg-[#F8FAF8] border border-[#E2EDE2] rounded-xl px-3 py-2">
+                        <div className="flex-1 flex items-center gap-2 bg-[#F8FAF8] dark:bg-[#0B0F1A] border border-[#E2EDE2] dark:border-[#1F2937] rounded-xl px-3 py-2">
                           <MousePointer className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />
                           <Input
                             value={btn.label}
@@ -404,7 +436,7 @@ function StepCard({
                     value={step.notifyNote ?? ""}
                     onChange={e => set("notifyNote", e.target.value)}
                     placeholder="e.g. High-value lead — prioritise follow-up within 1 hour"
-                    className="text-sm resize-none rounded-xl border-[#E2EDE2] p-3"
+                    className="text-sm resize-none rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB] p-3"
                     rows={2}
                   />
                 </div>
@@ -419,7 +451,7 @@ function StepCard({
                       value={step.message ?? ""}
                       onChange={e => set("message", e.target.value)}
                       placeholder="Great! Here's your booking link:"
-                      className="text-sm resize-none rounded-xl border-[#E2EDE2] p-3"
+                      className="text-sm resize-none rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB] p-3"
                       rows={2}
                     />
                   </div>
@@ -429,7 +461,7 @@ function StepCard({
                       value={step.bookingUrl ?? ""}
                       onChange={e => set("bookingUrl", e.target.value)}
                       placeholder="https://calendly.com/your-link"
-                      className="h-10 rounded-xl"
+                      className="h-10 rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB]"
                       type="url"
                     />
                   </div>
@@ -501,9 +533,28 @@ function StepCard({
                       <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
                       If TRUE → continue
                     </div>
-                    <div className="flex items-center gap-2 px-3 py-2.5 bg-red-50 rounded-xl border border-red-200 text-red-700">
-                      <div className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
-                      If FALSE → skip to end
+                    <div className="flex flex-col gap-2">
+                      <Select
+                        value={step.conditionFalseAction ?? "end"}
+                        onValueChange={v => set("conditionFalseAction", v)}
+                      >
+                        <SelectTrigger className="px-3 py-2.5 bg-red-50 rounded-xl border-red-200 text-red-700 h-auto font-bold text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="end" className="text-red-700 font-bold">If FALSE → skip to end</SelectItem>
+                          <SelectItem value="skip_next" className="text-orange-700 font-bold">If FALSE → skip next step</SelectItem>
+                          <SelectItem value="jump_to" className="text-blue-700 font-bold">If FALSE → jump to step</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {step.conditionFalseAction === "jump_to" && (
+                        <div className="px-2">
+                          <Input
+                            placeholder="Target Step ID"
+                            value={step.conditionFalseTargetId ?? ""}
+                            onChange={e => set("conditionFalseTargetId", e.target.value)}
+                            className="h-8 text-xs rounded-lg border-blue-200 bg-blue-50/50"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                   <p className="text-[10px] text-[#9CA3AF]">Enter the variable name without braces. If false, the flow stops here.</p>
@@ -530,7 +581,7 @@ function StepCard({
                       value={step.mediaUrl ?? ""}
                       onChange={e => set("mediaUrl", e.target.value)}
                       placeholder="https://example.com/image.jpg"
-                      className="h-10 rounded-xl"
+                      className="h-10 rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB]"
                       type="url"
                     />
                   </div>
@@ -540,7 +591,7 @@ function StepCard({
                       value={step.mediaCaption ?? ""}
                       onChange={e => set("mediaCaption", e.target.value)}
                       placeholder="Add a caption for this media…"
-                      className="text-sm resize-none rounded-xl border-[#E2EDE2] p-3"
+                      className="text-sm resize-none rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB] p-3"
                       rows={2}
                     />
                   </div>
@@ -558,7 +609,7 @@ function StepCard({
                         value={step.paymentAmount ?? ""}
                         onChange={e => set("paymentAmount", e.target.value)}
                         placeholder="0.00"
-                        className="h-10 rounded-xl"
+                        className="h-10 rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB]"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -580,7 +631,7 @@ function StepCard({
                       value={step.paymentDescription ?? ""}
                       onChange={e => set("paymentDescription", e.target.value)}
                       placeholder="e.g. Consultation Fee"
-                      className="h-10 rounded-xl"
+                      className="h-10 rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB]"
                     />
                   </div>
                 </div>
@@ -594,7 +645,7 @@ function StepCard({
                     value={step.aiPrompt ?? ""}
                     onChange={e => set("aiPrompt", e.target.value)}
                     placeholder="e.g. Answer using our service catalog: 'We offer dental implants starting at $1500...'"
-                    className="text-sm resize-none rounded-xl border-[#E2EDE2] p-3"
+                    className="text-sm resize-none rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB] p-3"
                     rows={4}
                   />
                   <p className="text-[10px] text-[#9CA3AF]">The AI will use this context to answer the user's last message.</p>
@@ -610,7 +661,7 @@ function StepCard({
                       value={step.webhookUrl ?? ""}
                       onChange={e => set("webhookUrl", e.target.value)}
                       placeholder="https://api.yourdomain.com/webhook"
-                      className="h-10 rounded-xl"
+                      className="h-10 rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB]"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -636,7 +687,7 @@ function StepCard({
                       value={step.listTitle ?? ""}
                       onChange={e => set("listTitle", e.target.value)}
                       placeholder="Choose a service…"
-                      className="h-10 rounded-xl"
+                      className="h-10 rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB]"
                     />
                   </div>
                   <div className="space-y-2">
@@ -707,7 +758,7 @@ function StepCard({
                       value={step.handoverNote ?? ""}
                       onChange={e => set("handoverNote", e.target.value)}
                       placeholder="e.g. Lead requested a custom quote — human expert needed."
-                      className="text-sm resize-none rounded-xl border-[#E2EDE2] p-3"
+                      className="text-sm resize-none rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB] p-3"
                       rows={2}
                     />
                   </div>
@@ -723,7 +774,7 @@ function StepCard({
                       value={step.spreadsheetId ?? ""}
                       onChange={e => set("spreadsheetId", e.target.value)}
                       placeholder="e.g. 1aBCdE_fghIjKlMnOpQrStUvW..."
-                      className="h-10 rounded-xl"
+                      className="h-10 rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB]"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -732,7 +783,7 @@ function StepCard({
                       value={step.sheetName ?? ""}
                       onChange={e => set("sheetName", e.target.value)}
                       placeholder="e.g. Leads, Sheet1"
-                      className="h-10 rounded-xl"
+                      className="h-10 rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB]"
                     />
                   </div>
                   <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100">
@@ -752,7 +803,7 @@ function StepCard({
                       value={step.endMessage ?? ""}
                       onChange={e => set("endMessage", e.target.value)}
                       placeholder="Thanks for chatting! We'll be in touch shortly. 🙏"
-                      className="text-sm resize-none rounded-xl border-[#E2EDE2] p-3"
+                      className="text-sm resize-none rounded-xl bg-white dark:bg-[#0B0F1A] border-[#E2EDE2] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB] p-3"
                       rows={3}
                     />
                     <p className="text-[10px] text-[#9CA3AF]">Leave blank to silently end the flow.</p>
@@ -787,8 +838,8 @@ function StepCard({
 function TriggerCard({ flow, onChange }: { flow: Flow; onChange: (p: Partial<Flow>) => void }) {
   const m = TRIGGER_META[flow.triggerType];
   return (
-    <div className="rounded-2xl border-2 border-[#16A34A]/40 dark:border-[#16A34A]/30 overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-3.5 bg-[#F0FDF4] dark:bg-green-900/10">
+    <div className="rounded-2xl border-2 border-[#16A34A]/40 dark:border-[#16A34A]/20 overflow-hidden shadow-sm">
+      <div className="flex items-center gap-3 px-4 py-3.5 bg-[#F0FDF4] dark:bg-[#061A0C]">
         <div className="w-8 h-8 bg-[#16A34A] rounded-xl flex items-center justify-center shrink-0">
           <Zap className="w-4 h-4 text-white" />
         </div>
@@ -839,9 +890,10 @@ function TriggerCard({ flow, onChange }: { flow: Flow; onChange: (p: Partial<Flo
 
 // ─── Flow Editor ──────────────────────────────────────────────────────────────
 
-function FlowEditor({ flow, onUpdate, onBack }: { flow: Flow; onUpdate: (f: Flow) => void; onBack: () => void }) {
+function FlowEditor({ flow, onUpdate, onSaveFlow, onBack }: { flow: Flow; onUpdate: (f: Flow) => void; onSaveFlow: (f: Flow) => Promise<void>; onBack: () => void }) {
   const { toast } = useToast();
   const [insertingAt, setInsertingAt] = useState<number | null>(null);
+  const [deletingStepIndex, setDeletingStepIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   function patch(updates: Partial<Flow>) { onUpdate({ ...flow, ...updates }); }
@@ -864,6 +916,7 @@ function FlowEditor({ flow, onUpdate, onBack }: { flow: Flow; onUpdate: (f: Flow
       conditionVariable: type === "condition" ? "" : undefined,
       conditionOperator: type === "condition" ? "equals" : undefined,
       conditionValue: type === "condition" ? "" : undefined,
+      conditionFalseAction: type === "condition" ? "end" : undefined,
       mediaType: type === "media" ? "image" : undefined,
       mediaUrl: type === "media" ? "" : undefined,
       mediaCaption: type === "media" ? "" : undefined,
@@ -889,9 +942,14 @@ function FlowEditor({ flow, onUpdate, onBack }: { flow: Flow; onUpdate: (f: Flow
 
   async function save() {
     setSaving(true);
-    await new Promise(r => setTimeout(r, 700));
-    setSaving(false);
-    toast("Flow saved successfully ✓", "success");
+    try {
+      await onSaveFlow(flow);
+      toast("Flow saved successfully ✓", "success");
+    } catch (e) {
+      toast("Failed to save flow to cloud", "error");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -957,7 +1015,7 @@ function FlowEditor({ flow, onUpdate, onBack }: { flow: Flow; onUpdate: (f: Flow
                 step={step}
                 index={i}
                 onUpdate={s => updateStep(i, s)}
-                onDelete={() => deleteStep(i)}
+                onDelete={() => setDeletingStepIndex(i)}
               />
             </div>
           ))}
@@ -986,7 +1044,21 @@ function FlowEditor({ flow, onUpdate, onBack }: { flow: Flow; onUpdate: (f: Flow
             )}
           </div>
 
-        </div>
+      </div>
+
+      <ConfirmDeleteDialog
+        open={deletingStepIndex !== null}
+        onOpenChange={(open) => !open && setDeletingStepIndex(null)}
+        title="Delete Step?"
+        description="This will remove this step and all its configuration from this flow. This action cannot be undone."
+        onConfirm={async () => {
+          if (deletingStepIndex !== null) {
+            deleteStep(deletingStepIndex);
+            setDeletingStepIndex(null);
+          }
+        }}
+        trigger={<span className="hidden" />}
+      />
       </div>
     </div>
   );
@@ -1080,6 +1152,9 @@ function ChatFlowsList({
 }: {
   flows: Flow[]; onEdit: (id: string) => void; onCreate: () => void; onDuplicate: (f: Flow) => void; onDelete: (id: string) => void;
 }) {
+  const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
+  const flowToDelete = flows.find(f => f.id === deletingFlowId);
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1103,21 +1178,9 @@ function ChatFlowsList({
               flow={flow}
               onEdit={() => onEdit(flow.id)}
               onDuplicate={() => onDuplicate(flow)}
-              onDelete={() => onDelete(flow.id)}
+              onDelete={() => setDeletingFlowId(flow.id)}
             />
           ))}
-          <button
-            onClick={onCreate}
-            className="group border-2 border-dashed border-[#E2EDE2] dark:border-[#1F2937] rounded-[24px] p-6 flex flex-col items-center justify-center text-center gap-3 hover:border-[#16A34A]/40 hover:bg-[#F0FDF4]/30 dark:hover:bg-green-900/10 transition-all min-h-[220px]"
-          >
-            <div className="w-12 h-12 rounded-2xl bg-[#F8FAF8] dark:bg-[#0B0F1A] border border-[#E2EDE2] dark:border-[#1F2937] flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Plus className="w-6 h-6 text-[#9CA3AF] group-hover:text-[#16A34A]" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-[#111827] dark:text-[#F9FAFB]">Add Another Flow</p>
-              <p className="text-[11px] text-[#9CA3AF]">Build a new automated journey</p>
-            </div>
-          </button>
         </div>
       ) : (
         <div className="bg-white dark:bg-[#111827] rounded-[32px] border-2 border-dashed border-[#E2EDE2] dark:border-[#1F2937] p-16 text-center">
@@ -1133,6 +1196,20 @@ function ChatFlowsList({
           </Button>
         </div>
       )}
+
+      <ConfirmDeleteDialog
+        open={!!deletingFlowId}
+        onOpenChange={(open) => !open && setDeletingFlowId(null)}
+        title={`Delete Flow "${flowToDelete?.name}"?`}
+        description="This will permanently delete this automation flow. Any active conversations using this flow will stop immediately."
+        onConfirm={async () => {
+          if (deletingFlowId) {
+            await onDelete(deletingFlowId);
+            setDeletingFlowId(null);
+          }
+        }}
+        trigger={<span className="hidden" />}
+      />
     </div>
   );
 }
@@ -1191,8 +1268,8 @@ function SectionCard({
 function SettingsTab() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState({
-    ai_enabled: true,
+  const [settings, setSettings] = useState<Settings>({
+    "ai_enabled": true,
     ai_auto_pipeline: false,
     business_name: "",
     industry: "online",
@@ -1622,33 +1699,28 @@ export default function AutomationPage() {
       steps: []
     };
 
-    // Optimistic update
     setFlows(prev => [f, ...prev]);
     setEditingId(f.id);
     setActiveTab("editor");
-    toast("Creating new flow...", "info");
-
-    try {
-      await apiFetch('/api/flows', {
-        method: 'POST',
-        body: JSON.stringify(f)
-      });
-      toast("Flow created! 🚀", "success");
-    } catch (err) {
-      console.error("Failed to create flow:", err);
-      toast("Failed to save flow to cloud", "error");
-    }
   }
 
-  async function updateFlow(updated: Flow) {
-    try {
-      await apiFetch('/api/flows', {
-        method: 'POST',
-        body: JSON.stringify(updated)
-      });
-      setFlows(prev => prev.map(f => f.id === updated.id ? updated : f));
-    } catch (err) {
-      console.error("Failed to update flow:", err);
+  function updateFlow(updated: Flow) {
+    // Only update local UI state immediately to prevent DB spam
+    setFlows(prev => prev.map(f => f.id === updated.id ? updated : f));
+  }
+
+  async function saveFlowToCloud(flowToSave: Flow) {
+    const response = await apiFetch('/api/flows', {
+      method: 'POST',
+      body: JSON.stringify(flowToSave)
+    });
+    
+    // Once saved, replace the temporary UI id with the actual Database UUID
+    if (response && response.id) {
+      setFlows(prev => prev.map(f => f.id === flowToSave.id ? { ...flowToSave, id: response.id } : f));
+      if (editingId === flowToSave.id) {
+        setEditingId(response.id);
+      }
     }
   }
 
@@ -1671,7 +1743,9 @@ export default function AutomationPage() {
 
   function duplicateFlow(flow: Flow) {
     const copy: Flow = { ...flow, id: genId(), name: flow.name + " (Copy)", active: false };
-    updateFlow(copy);
+    setFlows(prev => [copy, ...prev]);
+    setEditingId(copy.id);
+    setActiveTab("editor");
   }
 
   function startEditing(id: string) {
@@ -1743,6 +1817,7 @@ export default function AutomationPage() {
             <FlowEditor
               flow={editingFlow}
               onUpdate={updateFlow}
+              onSaveFlow={saveFlowToCloud}
               onBack={() => setActiveTab("flows")}
             />
           </TabsContent>
