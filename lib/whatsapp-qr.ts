@@ -540,7 +540,7 @@ async function dispatchIncomingMessageToQueue(
   fromMe: boolean,
   rawMessage?: any
 ): Promise<void> {
-  const apiUrl = process.env.API_URL || 'http://localhost:5000';
+  const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
   const internalKey = process.env.INTERNAL_API_KEY;
 
   if (!internalKey) {

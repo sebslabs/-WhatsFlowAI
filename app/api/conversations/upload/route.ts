@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     // SECURITY FIX (CRITICAL #4): Enforce MIME type allowlist
     if (!ALLOWED_MIME_TYPES.has(file.type)) {
       return NextResponse.json(
-        { error: `File type not allowed. Accepted types: ${[...ALLOWED_MIME_TYPES].join(', ')}` },
+        { error: `File type not allowed. Accepted types: ${Array.from(ALLOWED_MIME_TYPES).join(', ')}` },
         { status: 415 }
       );
     }
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
         });
       }
     } catch (err) {
-      logger.warn('Failed ensuring bucket exists:', err);
+      logger.warn({ err }, 'Failed ensuring bucket exists');
     }
 
     // Namespace by tenant to enforce tenant isolation in storage
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
       .createSignedUrl(fileName, 3600); // 1-hour expiry
 
     if (signedUrlErr || !signedUrlData?.signedUrl) {
-      logger.error('Failed to generate signed URL for uploaded file', signedUrlErr);
+      logger.error({ err: signedUrlErr }, 'Failed to generate signed URL for uploaded file');
       throw signedUrlErr ?? new Error('Signed URL generation failed');
     }
 

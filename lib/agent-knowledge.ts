@@ -23,8 +23,7 @@ export async function expandKnowledgeIds(tenantId: string, rootIds: string[]): P
   const admin = getSupabaseAdmin()
   const expanded = new Set<string>(rootIds)
 
-  const { data: roots } = await admin
-    .from('knowledge_base')
+  const { data: roots } = await (admin.from('knowledge_base') as any)
     .select('id, title, metadata')
     .eq('tenant_id', tenantId)
     .in('id', rootIds)
@@ -33,26 +32,24 @@ export async function expandKnowledgeIds(tenantId: string, rootIds: string[]): P
     expanded.add(root.id)
     const docId = (root.metadata as Record<string, unknown>)?.document_id as string | undefined
     if (docId) {
-      const { data: byDoc } = await admin
-        .from('knowledge_base')
+      const { data: byDoc } = await (admin.from('knowledge_base') as any)
         .select('id')
         .eq('tenant_id', tenantId)
         .filter('metadata->>document_id', 'eq', docId)
-      byDoc?.forEach((r) => expanded.add(r.id))
+      byDoc?.forEach((r: any) => expanded.add(r.id))
     }
 
     const stem = baseTitle(root.title || '')
     if (stem) {
-      const { data: byTitle } = await admin
-        .from('knowledge_base')
+      const { data: byTitle } = await (admin.from('knowledge_base') as any)
         .select('id, title')
         .eq('tenant_id', tenantId)
         .ilike('title', `${stem}%`)
-      byTitle?.forEach((r) => expanded.add(r.id))
+      byTitle?.forEach((r: any) => expanded.add(r.id))
     }
   }
 
-  return [...expanded]
+  return Array.from(expanded)
 }
 
 /** IDs this agent may use for RAG; null = search entire tenant knowledge base. */
@@ -70,16 +67,15 @@ export async function resolveAllowedKnowledgeIds(
   const expanded = new Set(await expandKnowledgeIds(tenantId, linkedIds))
 
   const admin = getSupabaseAdmin()
-  const { data: agentRows } = await admin
-    .from('knowledge_base')
+  const { data: agentRows } = await (admin.from('knowledge_base') as any)
     .select('id')
     .eq('tenant_id', tenantId)
     .filter('metadata->>agent_id', 'eq', agentId)
 
-  agentRows?.forEach((r) => expanded.add(r.id))
+  agentRows?.forEach((r: any) => expanded.add(r.id))
 
   if (expanded.size === 0) return null
-  return [...expanded]
+  return Array.from(expanded)
 }
 
 async function upsertAgentChunk(
@@ -93,8 +89,7 @@ async function upsertAgentChunk(
   const admin = getSupabaseAdmin()
   const embedding = await generateEmbedding(content)
 
-  const { data: existing } = await admin
-    .from('knowledge_base')
+  const { data: existing } = await (admin.from('knowledge_base') as any)
     .select('id')
     .eq('tenant_id', tenantId)
     .filter('metadata->>agent_id', 'eq', agentId)
@@ -116,18 +111,18 @@ async function upsertAgentChunk(
   }
 
   if (existing?.id) {
-    await admin.from('knowledge_base').update(payload).eq('id', existing.id)
+    await (admin.from('knowledge_base') as any).update(payload).eq('id', existing.id)
     if (!payload.metadata.document_id) {
-      await admin
-        .from('knowledge_base')
+      await (admin
+        .from('knowledge_base') as any)
         .update({ metadata: { ...payload.metadata, document_id: existing.id } })
         .eq('id', existing.id)
     }
   } else {
-    const { data: inserted } = await admin.from('knowledge_base').insert(payload).select('id').single()
+    const { data: inserted } = await (admin.from('knowledge_base') as any).insert(payload).select('id').single()
     if (inserted?.id) {
-      await admin
-        .from('knowledge_base')
+      await (admin
+        .from('knowledge_base') as any)
         .update({ metadata: { ...payload.metadata, document_id: inserted.id } })
         .eq('id', inserted.id)
     }

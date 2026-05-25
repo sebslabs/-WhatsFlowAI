@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -209,7 +209,7 @@ function MessageBubble({ msg, isTyping }: { msg?: Message; isTyping?: boolean })
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function ConversationsPage() {
+function ConversationsPageInner() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const urlLeadId = searchParams.get("leadId");
@@ -1568,5 +1568,20 @@ export default function ConversationsPage() {
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+export default function ConversationsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen items-center justify-center bg-white dark:bg-[#0D1117]">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-[#22C55E]" />
+          <span className="text-xs text-[#6B7280]">Loading conversations...</span>
+        </div>
+      </div>
+    }>
+      <ConversationsPageInner />
+    </Suspense>
   );
 }

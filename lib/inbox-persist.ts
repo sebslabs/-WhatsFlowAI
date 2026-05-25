@@ -50,7 +50,7 @@ function normalizePhoneVariants(phone: string): string[] {
   const clean = phone.replace(/\D/g, '');
   if (!clean) return [];
   const variants = new Set<string>([clean, `+${clean}`]);
-  return [...variants];
+  return Array.from(variants);
 }
 
 async function linkLeadsToContact(
@@ -59,7 +59,7 @@ async function linkLeadsToContact(
   phone: string,
   name: string
 ): Promise<void> {
-  const db = getSupabaseAdmin();
+  const db = getSupabaseAdmin() as any;
   const variants = normalizePhoneVariants(phone);
 
   const { data: existing } = await db
@@ -112,7 +112,7 @@ export async function persistBaileysMessage(
   input: PersistBaileysMessageInput
 ): Promise<{ conversationId: string; messageId: string; contactId: string } | null> {
   const { tenantId, messageId, phone, rawJid, sendJid, sessionId, pushName, text, fromMe, rawMessage } = input;
-  const db = getSupabaseAdmin();
+  const db = getSupabaseAdmin() as any;
 
   const { data: existingWa } = await db
     .from('messages')

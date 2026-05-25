@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       };
       const sessions = globalForBaileys.baileysSessions;
       if (sessions && sessions.size > 0) {
-        for (const sock of sessions.values()) {
+        for (const sock of Array.from(sessions.values())) {
           if (sock && sock.ws?.readyState === 1) {
             baileysSocketReady = true;
             break;

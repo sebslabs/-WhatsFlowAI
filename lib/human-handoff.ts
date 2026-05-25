@@ -13,16 +13,14 @@ export async function initiateHumanHandoff(
 ): Promise<boolean> {
   try {
     const admin = getSupabaseAdmin()
-    const { data: convRow } = await admin
-      .from('conversations')
+    const { data: convRow } = await (admin.from('conversations') as any)
       .select('id')
       .eq('contact_id', contactId)
       .eq('tenant_id', tenantId)
       .maybeSingle()
     const conversationId = convRow?.id || leadId || 'unknown'
     logger.info(`[HumanHandoff] Triggered for conversationId ${conversationId}`)
-    let query = admin
-      .from('leads')
+    let query = (admin.from('leads') as any)
       .update({ ai_active: false, updated_at: new Date().toISOString() })
       .eq('tenant_id', tenantId)
 

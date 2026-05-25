@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       resolvedSourceIds = await resolveAllowedKnowledgeIds(
         tenantId,
         agentId,
-        (agent?.metadata?.kbSources ?? []) as AgentKbSource[]
+        ((agent as any)?.metadata?.kbSources ?? []) as AgentKbSource[]
       );
     }
 

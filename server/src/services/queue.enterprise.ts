@@ -223,7 +223,7 @@ export async function getAllQueueMetrics(): Promise<QueueMetrics[]> {
 
 export async function closeAllQueues(): Promise<void> {
   logger.info('[queue] Closing all queues…')
-  await Promise.all([..._queues.values()].map((q) => q.close()))
+  await Promise.all(Array.from(_queues.values()).map((q) => q.close()))
   if (_connection) await _connection.quit()
   logger.info('[queue] All queues closed')
 }

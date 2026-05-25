@@ -52,5 +52,5 @@ export async function resolveConversationIdsForLead(
     }
   }
 
-  return [...ids];
+  return Array.from(ids);
 }

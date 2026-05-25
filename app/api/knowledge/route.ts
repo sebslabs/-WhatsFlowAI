@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
                   const contentMatch = m.match(/\(([^)]*)\)/);
                   if (contentMatch && contentMatch[1]) {
                     const cleanText = contentMatch[1]
-                      .replace(/\\([0-7]{3})/g, (_, octal) => String.fromCharCode(parseInt(octal, 8)))
+                      .replace(/\\([0-7]{3})/g, (_: string, octal: string) => String.fromCharCode(parseInt(octal, 8)))
                       .replace(/\\(.)/g, '$1');
                     parsedText += cleanText + ' ';
                   }
@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
       const chunkTitle = chunks.length > 1 ? `${title} (Part ${i + 1})` : title;
       const embedding = await generateEmbedding(chunkTextSegment);
 
-      const { data, error: dbError } = await supabase
+      const insertResult: any = await supabase
         .from('knowledge_base')
         .insert({
           tenant_id: user.tenant_id,
@@ -233,6 +233,9 @@ export async function POST(request: NextRequest) {
         })
         .select('id')
         .single();
+
+      const dbError = insertResult.error;
+      const data = insertResult.data;
 
       if (dbError) {
         logger.error({ dbError }, '[knowledge] Chunk insertion failed');
