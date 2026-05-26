@@ -60,7 +60,7 @@ export class TokenBudgetService {
       reason = 'cost_limit_exceeded';
     }
 
-    return {
+    const res: BudgetStatus = {
       allowed,
       reason,
       tokensUsedToday,
@@ -68,6 +68,7 @@ export class TokenBudgetService {
       costUsedToday,
       costLimit,
     };
+    return res;
   }
 
   /**

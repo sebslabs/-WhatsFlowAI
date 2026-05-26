@@ -56,21 +56,13 @@ const envOrigins = (process.env.ALLOWED_ORIGIN ?? '').split(',').map((o) => o.tr
 const allowedOrigins =
   envOrigins.length > 0
     ? envOrigins
-    : ['http://localhost:3000', 'http://127.0.0.1:3000']
+    : ['http://localhost:3000', 'http://127.0.0.1:3000', 'https://whatsflow.vercel.app', process.env.NEXT_PUBLIC_SITE_URL].filter(Boolean) as string[]
 
 app.use(
   cors({
     origin: (origin, cb) => {
-      // No Origin header received
       if (!origin) {
-        // In production, all browser requests must include Origin; reject absent ones.
-        // Server-to-server calls that legitimately lack an Origin must use the
-        // /api/internal path (validated by x-internal-key instead).
-        if (process.env.NODE_ENV === 'production') {
-          cb(new Error('CORS: Origin header is required in production'))
-          return
-        }
-        // In development/test, allow origin-less requests (Postman, curl, health checks)
+        // Allow origin-less requests (Postman, curl, health checks, server-to-server)
         cb(null, true)
         return
       }
@@ -199,7 +191,7 @@ export { getQueue } from './services/queue.enterprise.js'
     startQueueMetricsCollection()
 
     // 4. Bind HTTP
-    httpServer.listen(PORT, () => {
+    httpServer.listen(PORT, '0.0.0.0', () => {
       logger.info('WhatsFlow AI API ready', {
         port: PORT,
         env: process.env.NODE_ENV ?? 'development',

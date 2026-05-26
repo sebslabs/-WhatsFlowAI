@@ -56,3 +56,5 @@ scratch/
 # Archives and build artifacts
 *.zip
 *.tar.gz
+
+.vercel

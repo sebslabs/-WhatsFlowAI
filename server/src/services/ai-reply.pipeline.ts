@@ -104,11 +104,14 @@ export class AiReplyPipeline {
         `Security policy: ${threatClass.reason}`,
         leadId
       );
-      return {
+      const result: AiReplyPipelineResult = {
         replied: false,
         handoff: true,
-        blockReason: threatClass.reason,
       };
+      if (threatClass.reason) {
+        result.blockReason = threatClass.reason;
+      }
+      return result;
     }
 
     const systemPrompt = buildAgentSystemPrompt(agent);
@@ -162,13 +165,16 @@ export class AiReplyPipeline {
         `Response validation failed: ${validation.reason}`,
         leadId
       );
-      return {
+      const result: AiReplyPipelineResult = {
         replied: true,
         handoff: true,
         replyText: validation.sanitizedText.slice(0, 1000),
         model: modelStr,
-        blockReason: validation.reason,
       };
+      if (validation.reason) {
+        result.blockReason = validation.reason;
+      }
+      return result;
     }
 
     const finalReply = validation.sanitizedText.slice(0, 1000);

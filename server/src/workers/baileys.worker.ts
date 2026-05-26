@@ -395,15 +395,16 @@ async function runAiAutoReply(
     content: m.content,
   }))
 
-  const result = await AiReplyPipeline.process({
-    tenantId,
-    contactId,
-    conversationId,
-    leadId,
-    message: inboundText,
-    agent: activeAgent,
-    history,
-  })
+      const pipelineInput: any = {
+        tenantId,
+        contactId,
+        conversationId,
+        message: inboundText,
+        agent: activeAgent,
+        history,
+      };
+      if (leadId) pipelineInput.leadId = leadId;
+      const result = await AiReplyPipeline.process(pipelineInput);
 
   if (!result.replied || !result.replyText?.trim()) return
 

@@ -1,0 +1,45 @@
+# ────────────────────────────────────────────────────────────────
+# WhatsFlow AI — Fly.io Production Dockerfile
+# ────────────────────────────────────────────────────────────────
+
+FROM node:20-alpine
+WORKDIR /app
+
+# Ensure we can copy built files (bypassing root .dockerignore if necessary)
+# since GH actions will build the files prior to deploying via Fly.
+# However, Fly remote builder needs to build it if we are just using standard fly deploy.
+# Wait, let's just make a multi-stage Dockerfile to be fully safe, so it builds itself on Fly!
+
+# Stage 1: Dependencies
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Stage 2: Build
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.json ./
+RUN npm ci
+COPY src ./src
+RUN npm run build
+
+# Stage 3: Runtime
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 whatsflow
+
+COPY --from=deps --chown=whatsflow:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=whatsflow:nodejs /app/dist ./dist
+COPY --chown=whatsflow:nodejs package.json ./
+
+USER whatsflow
+ENV NODE_ENV=production
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://localhost:5000/health || exit 1
+
+CMD ["node", "dist/index.js"]

@@ -281,7 +281,8 @@ async function processWebhookJob(job: Job<WebhookJobData>): Promise<void> {
     }
 
     // ── 4. Verify AI Auto-Response Toggle State ──────────────────────────────
-    if (lead && !lead.ai_active) {
+    let isAiActive = (lead as any).ai_active;
+    if (lead && !isAiActive) {
       logger.info('[worker] AI auto-reply disabled for lead: human has taken over.', { leadId });
       await markWebhookProcessed(messageId);
       return;

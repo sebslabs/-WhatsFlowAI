@@ -36,8 +36,8 @@ function isPrivateIp(ip: string): boolean {
   // 169.254.0.0/16 (Link-local)
   const ipv4Parts = ip.split('.');
   if (ipv4Parts.length === 4) {
-    const octet1 = parseInt(ipv4Parts[0], 10);
-    const octet2 = parseInt(ipv4Parts[1], 10);
+    const octet1 = parseInt(ipv4Parts[0] || '0', 10);
+    const octet2 = parseInt(ipv4Parts[1] || '0', 10);
 
     if (octet1 === 127) return true;
     if (octet1 === 10) return true;

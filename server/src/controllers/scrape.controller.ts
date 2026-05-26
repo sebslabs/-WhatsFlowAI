@@ -102,8 +102,8 @@ export class ScrapeController {
         status: 'queued',
       });
     } catch (err: any) {
-      if (err instanceof z.ZodError) {
-        res.status(400).json({ error: err.errors[0]?.message || 'Invalid input data.' });
+      if (err && Array.isArray(err.issues)) {
+        res.status(400).json({ error: 'Validation failed', details: err.issues });
         return;
       }
       logger.error('[ScrapeController] Exception triggering website scrape', { error: err.message });

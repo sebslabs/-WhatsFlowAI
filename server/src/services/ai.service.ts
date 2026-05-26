@@ -55,13 +55,11 @@ async function callInternalAI(payload: {
       text: String(data.text ?? ''),
       error: data.error ? String(data.error) : undefined,
     };
-  } catch (error: any) {
-    console.error('[AIService] Consolidated bridge request failed:', error.message);
-    return {
-      success: false,
-      text: 'Our AI assistant is temporarily offline. A team member will be in touch shortly.',
-      error: error.message
-    };
+  } catch (err: any) {
+    console.error('[AIService] Consolidated bridge request failed:', err.message);
+    const res = { success: false, text: 'Our AI assistant is temporarily offline. A team member will be in touch shortly.' } as any;
+    if (err.message) res.error = err.message;
+    return res;
   }
 }
 
@@ -178,7 +176,7 @@ export class AIService {
       tenantId,
       agentId,
       handoffContext,
-      conversationId,
+      // conversationId: conversationId,
     });
     return res.text;
   }

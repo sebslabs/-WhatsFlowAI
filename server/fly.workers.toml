@@ -1,0 +1,11 @@
+app = "whatsflow-workers"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile.fly"
+
+[env]
+  NODE_ENV = "production"
+
+[processes]
+  app = "node dist/workers/webhook.worker.js & node dist/workers/outbound.worker.js"

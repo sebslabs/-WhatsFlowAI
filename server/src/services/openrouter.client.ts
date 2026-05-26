@@ -21,8 +21,8 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
 
 function calculateCost(model: string, usage: TokenUsage): number {
   const price = MODEL_PRICING[model] || MODEL_PRICING['default'];
-  const inputCost = (usage.promptTokens / 1_000_000) * price.input;
-  const outputCost = (usage.completionTokens / 1_000_000) * price.output;
+  const inputCost = (usage.promptTokens / 1_000_000) * (price?.input ?? 0.20);
+  const outputCost = (usage.completionTokens / 1_000_000) * (price?.output ?? 0.60);
   return Number((inputCost + outputCost).toFixed(6));
 }
 
@@ -87,6 +87,10 @@ export class OpenRouterClient {
 
       const responseData = await response.json();
       const latencyMs = Date.now() - startTime;
+
+      const price = MODEL_PRICING[activeModel] ?? MODEL_PRICING['default'];
+      const costPerTokenInput = price?.input ?? 0.000002;
+      const costPerTokenOutput = price?.output ?? 0.000002;
 
       const choice = responseData?.choices?.[0];
       const text = choice?.message?.content || '';
