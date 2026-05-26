@@ -50,11 +50,13 @@ export async function POST(req: NextRequest) {
         .eq('id', agentId)
         .eq('tenant_id', tenantId)
         .maybeSingle();
-      resolvedSourceIds = await resolveAllowedKnowledgeIds(
-        tenantId,
-        agentId,
-        (agent?.metadata?.kbSources ?? []) as AgentKbSource[]
-      );
+      if (agent) {
+        resolvedSourceIds = await resolveAllowedKnowledgeIds(
+          tenantId,
+          agentId,
+          (agent.metadata?.kbSources ?? []) as AgentKbSource[]
+        );
+      }
     }
 
     const response = await AIGateway.generateResponse({
