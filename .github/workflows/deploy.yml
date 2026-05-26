@@ -57,8 +57,12 @@ jobs:
           
       - name: Build Frontend Locally (Validation)
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://fallback.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'fallback-anon-key' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://fallback.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'fallback-service-role-key' }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'fallback-anon-key' }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY || 'fallback-encryption-key-32-chars!!' }}
         run: |
           npm ci
           npm run build
