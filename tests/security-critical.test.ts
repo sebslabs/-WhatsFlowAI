@@ -7,11 +7,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(),
+}));
+
 // ─── Fix #1a: /api/diagnostic returns 404 in production ────────────────────
 
 describe('CRITICAL Fix #1a — /api/diagnostic disabled in production', () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.com');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-key');
   });
 
   afterEach(() => {
@@ -54,6 +61,15 @@ describe('CRITICAL Fix #1a — /api/diagnostic disabled in production', () => {
 // ─── Fix #1b: /api/diagnostic/messages returns 404 in all environments ─────
 
 describe('CRITICAL Fix #1b — /api/diagnostic/messages permanently disabled', () => {
+  let createClientSpy: any;
+
+  beforeEach(() => {
+    createClientSpy = vi.fn();
+    vi.doMock('@supabase/supabase-js', () => ({ 
+      createClient: createClientSpy 
+    }));
+  });
+
   it('should return 404 regardless of NODE_ENV', async () => {
     vi.resetModules();
     const { GET } = await import('../app/api/diagnostic/messages/route');
@@ -66,9 +82,6 @@ describe('CRITICAL Fix #1b — /api/diagnostic/messages permanently disabled', (
   });
 
   it('should NOT perform any database mutations (no Supabase client instantiated)', async () => {
-    const createClientSpy = vi.fn();
-    vi.mock('@supabase/supabase-js', () => ({ createClient: createClientSpy }));
-
     vi.resetModules();
     const { GET } = await import('../app/api/diagnostic/messages/route');
     await GET();

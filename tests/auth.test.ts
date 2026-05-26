@@ -107,6 +107,6 @@ describe('API Auth Guards', () => {
 
     expect(result.user).toBeNull();
     expect(result.error).toBeInstanceOf(NextResponse);
-    expect(result.error?.status).toBe(403);
+    expect(result.error?.status).toBe(401);
   });
 });

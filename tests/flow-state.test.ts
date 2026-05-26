@@ -1,8 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
-import { FlowService } from '@/server/src/services/flow.service';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 describe('Chatbot Flow Engine', () => {
   const mockTenantId = 'tenant-123';
+  
+  beforeEach(() => {
+    process.env.OPENAI_API_KEY = 'test-key-abc';
+  });
 
   it('should match keyword flow correctly when trigger keyword is in the message', async () => {
     // Mock Supabase select for chatbot_flows
@@ -40,6 +43,7 @@ describe('Chatbot Flow Engine', () => {
       }),
     } as any;
 
+    const { FlowService } = await import('@/server/src/services/flow.service');
     const matchedFlow = await FlowService.matchKeywordFlow(mockDb, mockTenantId, 'What is your pricing options?');
     expect(matchedFlow).toBe('flow-pricing-123');
 
@@ -74,6 +78,7 @@ describe('Chatbot Flow Engine', () => {
       }),
     } as any;
 
+    const { FlowService } = await import('@/server/src/services/flow.service');
     const welcomeFlow = await FlowService.findWelcomeFlow(mockDb, mockTenantId);
     expect(welcomeFlow).toBe('welcome-flow-789');
   });
