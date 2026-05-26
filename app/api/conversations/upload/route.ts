@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       .createSignedUrl(fileName, 3600); // 1-hour expiry
 
     if (signedUrlErr || !signedUrlData?.signedUrl) {
-      logger.error('Failed to generate signed URL for uploaded file', signedUrlErr);
+      logger.error('Failed to generate signed URL for uploaded file', signedUrlErr?.message ?? 'Unknown error');
       throw signedUrlErr ?? new Error('Signed URL generation failed');
     }
 
