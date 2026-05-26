@@ -203,7 +203,15 @@ jobs:
       - name: Deploy to Fly.io (staging)
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - run: flyctl deploy --app whatsflow-staging --strategy rolling
+      - name: Deploy API to Fly.io (staging)
+        run: flyctl deploy -c fly.toml --app whatsflow-api-staging --strategy rolling
+        working-directory: ./server
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Deploy Workers to Fly.io (staging)
+        run: flyctl deploy -c fly.workers.toml --app whatsflow-workers-staging --strategy rolling
+        working-directory: ./server
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
@@ -222,12 +230,24 @@ jobs:
       - name: Deploy to Fly.io (production) — rolling strategy
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - run: |
+      - name: Deploy API to Fly.io (production)
+        run: |
           # Rolling deploy: new instances come up, pass health check, old ones drain
-          flyctl deploy \
-            --app whatsflow-prod \
+          flyctl deploy -c fly.toml \
+            --app whatsflow-api \
             --strategy rolling \
             --wait-timeout 120
+        working-directory: ./server
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Deploy Workers to Fly.io (production)
+        run: |
+          flyctl deploy -c fly.workers.toml \
+            --app whatsflow-workers \
+            --strategy rolling \
+            --wait-timeout 120
+        working-directory: ./server
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
