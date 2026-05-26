@@ -68,8 +68,8 @@ export async function POST(request: NextRequest) {
           allowedMimeTypes: Array.from(ALLOWED_MIME_TYPES),
         });
       }
-    } catch (err) {
-      logger.error('Failed ensuring avatars bucket exists via admin:', err);
+    } catch (err: any) {
+      logger.error({ err }, 'Failed ensuring avatars bucket exists via admin');
     }
 
     // Enforce user isolation in path: `user_id/avatar-timestamp.ext`
@@ -100,10 +100,9 @@ export async function POST(request: NextRequest) {
     const publicUrl = publicUrlData.publicUrl;
 
     // Update profiles table with the new avatar URL
-    const { error: profileUpdateErr } = await supabaseAdmin
-      .from('profiles')
+    const { error: profileUpdateErr } = await (supabaseAdmin.from('profiles') as any)
       .update({ avatar_url: publicUrl })
-      .eq('id', user.id);
+      .eq('id', user.id) as { error: any };
 
     if (profileUpdateErr) {
       logger.error({ err: profileUpdateErr }, 'Failed to update avatar_url in profiles table');
@@ -135,7 +134,7 @@ export async function DELETE(request: NextRequest) {
       .from('profiles')
       .select('avatar_url')
       .eq('id', user.id)
-      .maybeSingle();
+      .maybeSingle() as { data: { avatar_url: string | null } | null; error: any };
 
     if (fetchErr) {
       logger.error({ err: fetchErr }, 'Failed to fetch user profile during avatar deletion');
@@ -158,10 +157,9 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 2. Set the avatar_url in the profiles table to NULL
-    const { error: profileUpdateErr } = await supabaseAdmin
-      .from('profiles')
+    const { error: profileUpdateErr } = await (supabaseAdmin.from('profiles') as any)
       .update({ avatar_url: null })
-      .eq('id', user.id);
+      .eq('id', user.id) as { error: any };
 
     if (profileUpdateErr) {
       logger.error({ err: profileUpdateErr }, 'Failed to reset avatar_url in profiles table');

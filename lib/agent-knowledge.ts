@@ -43,7 +43,7 @@ export async function expandKnowledgeIds(tenantId: string, rootIds: string[]): P
         .from('knowledge_base')
         .select('id')
         .eq('tenant_id', tenantId)
-        .filter('metadata->>document_id', 'eq', docId)
+        .filter('metadata->>document_id', 'eq', docId) as { data: Array<{ id: string }> | null }
       byDoc?.forEach((r) => expanded.add(r.id))
     }
 
@@ -53,7 +53,7 @@ export async function expandKnowledgeIds(tenantId: string, rootIds: string[]): P
         .from('knowledge_base')
         .select('id, title')
         .eq('tenant_id', tenantId)
-        .ilike('title', `${stem}%`)
+        .ilike('title', `${stem}%`) as { data: Array<{ id: string, title: string | null }> | null }
       byTitle?.forEach((r) => expanded.add(r.id))
     }
   }
@@ -80,7 +80,7 @@ export async function resolveAllowedKnowledgeIds(
     .from('knowledge_base')
     .select('id')
     .eq('tenant_id', tenantId)
-    .filter('metadata->>agent_id', 'eq', agentId)
+    .filter('metadata->>agent_id', 'eq', agentId) as { data: Array<{ id: string }> | null }
 
   agentRows?.forEach((r) => expanded.add(r.id))
 
@@ -105,7 +105,7 @@ async function upsertAgentChunk(
     .eq('tenant_id', tenantId)
     .filter('metadata->>agent_id', 'eq', agentId)
     .filter('metadata->>agent_kb_source_id', 'eq', sourceId)
-    .maybeSingle()
+    .maybeSingle() as { data: { id: string } | null }
 
   const payload = {
     tenant_id: tenantId,
@@ -122,18 +122,16 @@ async function upsertAgentChunk(
   }
 
   if (existing?.id) {
-    await admin.from('knowledge_base').update(payload).eq('id', existing.id)
+    await (admin.from('knowledge_base') as any).update(payload).eq('id', existing.id)
     if (!payload.metadata.document_id) {
-      await admin
-        .from('knowledge_base')
+      await (admin.from('knowledge_base') as any)
         .update({ metadata: { ...payload.metadata, document_id: existing.id } })
         .eq('id', existing.id)
     }
   } else {
-    const { data: inserted } = await admin.from('knowledge_base').insert(payload).select('id').single()
+    const { data: inserted } = await (admin.from('knowledge_base') as any).insert(payload).select('id').single() as { data: { id: string } | null }
     if (inserted?.id) {
-      await admin
-        .from('knowledge_base')
+      await (admin.from('knowledge_base') as any)
         .update({ metadata: { ...payload.metadata, document_id: inserted.id } })
         .eq('id', inserted.id)
     }

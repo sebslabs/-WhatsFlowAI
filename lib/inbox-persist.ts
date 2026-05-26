@@ -81,7 +81,7 @@ async function linkLeadsToContact(
     if (!existing.phone) patch.phone = phone;
     if (name && !isPlaceholderContactName(name)) patch.name = name;
     if (Object.keys(patch).length > 0) {
-      await db.from('leads').update(patch).eq('id', existing.id);
+      await (db.from('leads') as any).update(patch).eq('id', existing.id);
     }
     return;
   }
@@ -97,12 +97,12 @@ async function linkLeadsToContact(
     if (byPhone) {
       const leadPatch: { contact_id: string; name?: string } = { contact_id: contactId };
       if (!byPhone.contact_id) leadPatch.name = name;
-      await db.from('leads').update(leadPatch).eq('id', byPhone.id);
+      await (db.from('leads') as any).update(leadPatch).eq('id', byPhone.id);
       return;
     }
   }
 
-  await db.from('leads').insert({
+  await (db.from('leads') as any).insert({
     tenant_id: tenantId,
     contact_id: contactId,
     stage: 'new',
@@ -121,18 +121,23 @@ export async function persistBaileysMessage(
   const { tenantId, messageId, phone, rawJid, sendJid, sessionId, pushName, text, fromMe, rawMessage } = input;
   const db = getSupabaseAdmin();
 
+  interface MessageRow {
+    id: string
+    conversation_id: string
+  }
+
   const { data: existingWa } = await db
     .from('messages')
     .select('id, conversation_id')
     .eq('wa_message_id', messageId)
-    .maybeSingle();
+    .maybeSingle() as { data: MessageRow | null };
 
   if (existingWa) {
     const { data: convRow } = await db
       .from('conversations')
       .select('contact_id')
       .eq('id', existingWa.conversation_id)
-      .maybeSingle();
+      .maybeSingle() as { data: { contact_id: string } | null };
     return {
       conversationId: existingWa.conversation_id as string,
       messageId: existingWa.id as string,
@@ -145,11 +150,11 @@ export async function persistBaileysMessage(
     .from('webhook_events')
     .select('id')
     .eq('external_event_id', idempotencyKey)
-    .maybeSingle();
+    .maybeSingle() as { data: { id: string } | null; error: any };
 
   if (duplicateEvent) return null;
 
-  await db.from('webhook_events').insert({
+  await (db.from('webhook_events') as any).insert({
     external_event_id: idempotencyKey,
     payload: { messageId, phone, raw_jid: rawJid, pushName, text, fromMe },
     tenant_id: tenantId,
@@ -160,7 +165,7 @@ export async function persistBaileysMessage(
     .select('id, name, metadata')
     .eq('tenant_id', tenantId)
     .eq('phone_number', phone)
-    .maybeSingle();
+    .maybeSingle() as { data: { id: string, name: string | null, metadata: any } | null; error: any };
 
   const contactName = resolveContactDisplayName({
     pushName,
@@ -176,8 +181,7 @@ export async function persistBaileysMessage(
 
   if (existingContact) {
     contactId = existingContact.id;
-    await db
-      .from('contacts')
+    await (db.from('contacts') as any)
       .update({
         metadata: {
           ...(typeof existingContact.metadata === 'object' && existingContact.metadata !== null
@@ -189,8 +193,7 @@ export async function persistBaileysMessage(
       })
       .eq('id', contactId);
   } else {
-    const { data: newContact, error: contactErr } = await db
-      .from('contacts')
+    const { data: newContact, error: contactErr } = await (db.from('contacts') as any)
       .insert({
         tenant_id: tenantId,
         phone_number: phone,
@@ -206,12 +209,18 @@ export async function persistBaileysMessage(
 
   await linkLeadsToContact(tenantId, contactId, phone, contactName);
 
+  interface ConversationRow {
+    id: string
+    contact_id: string
+    unread_count: number | null
+  }
+
   const { data: existingConv } = await db
     .from('conversations')
     .select('id, unread_count')
     .eq('tenant_id', tenantId)
     .eq('contact_id', contactId)
-    .maybeSingle();
+    .maybeSingle() as { data: ConversationRow | null };
 
   let conversationId: string;
   let unreadCount = 0;
@@ -220,8 +229,7 @@ export async function persistBaileysMessage(
     conversationId = existingConv.id;
     unreadCount = existingConv.unread_count ?? 0;
   } else {
-    const { data: newConv, error: convErr } = await db
-      .from('conversations')
+    const { data: newConv, error: convErr } = await (db.from('conversations') as any)
       .insert({
         tenant_id: tenantId,
         contact_id: contactId,
@@ -304,8 +312,7 @@ export async function persistBaileysMessage(
     }
   }
 
-  const { data: insertedMsg, error: insertErr } = await db
-    .from('messages')
+  const { data: insertedMsg, error: insertErr } = await (db.from('messages') as any)
     .insert({
       tenant_id: tenantId,
       conversation_id: conversationId,
@@ -317,15 +324,15 @@ export async function persistBaileysMessage(
       metadata: { phone, raw_jid: rawJid, contact_name: contactName, media_error: mediaError },
     })
     .select('id')
-    .single();
+    .single() as { data: { id: string } | null; error: any };
 
   if (insertErr) {
     if (insertErr.code === '23505') return null;
     throw insertErr;
   }
+  if (!insertedMsg) return null;
 
-  await db
-    .from('conversations')
+  await (db.from('conversations') as any)
     .update({
       last_message_at: new Date().toISOString(),
       unread_count: fromMe ? unreadCount : unreadCount + 1,
@@ -354,7 +361,7 @@ export async function persistBaileysMessage(
       .eq('status', 'connected')
       .order('last_connected_at', { ascending: false })
       .limit(1)
-      .maybeSingle();
+      .maybeSingle() as { data: { id: string } | null; error: any };
 
     scheduleAiAutoReply({
       tenantId,

@@ -18,11 +18,10 @@ export async function initiateHumanHandoff(
       .select('id')
       .eq('contact_id', contactId)
       .eq('tenant_id', tenantId)
-      .maybeSingle()
+      .maybeSingle() as { data: { id: string } | null; error: any }
     const conversationId = convRow?.id || leadId || 'unknown'
     logger.info(`[HumanHandoff] Triggered for conversationId ${conversationId}`)
-    let query = admin
-      .from('leads')
+    let query = (admin.from('leads') as any)
       .update({ ai_active: false, updated_at: new Date().toISOString() })
       .eq('tenant_id', tenantId)
 
@@ -32,7 +31,7 @@ export async function initiateHumanHandoff(
       query = query.eq('contact_id', contactId)
     }
 
-    const { data, error } = await query.select('id').maybeSingle()
+    const { data, error } = await (query as any).select('id').maybeSingle() as { data: { id: string } | null; error: any }
     if (error) throw error
 
     const activeLeadId = data?.id ?? leadId ?? 'unknown'

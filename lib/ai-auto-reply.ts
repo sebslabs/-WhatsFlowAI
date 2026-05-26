@@ -40,7 +40,7 @@ async function fetchActiveAgent(tenantId: string, conversationId: string) {
     .from('conversations')
     .select('metadata')
     .eq('id', conversationId)
-    .maybeSingle()
+    .maybeSingle() as { data: { metadata: any, ai_agent_id?: string } | null; error: any }
 
   const meta = (conv?.metadata ?? {}) as Record<string, string>
   const selectedId = meta.selected_agent_id || meta.ai_agent_id
@@ -76,7 +76,7 @@ async function workerAlreadyReplied(conversationId: string, afterMessageId: stri
     .select('id, sender_type')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
-    .limit(6)
+    .limit(6) as { data: { id: string, sender_type: string }[] | null; error: any }
 
   if (!rows?.length) return false
 
@@ -93,7 +93,7 @@ async function isAiAllowedForLead(tenantId: string, contactId: string): Promise<
     .select('id, ai_active')
     .eq('tenant_id', tenantId)
     .eq('contact_id', contactId)
-    .maybeSingle()
+    .maybeSingle() as { data: { id: string, ai_active: boolean } | null; error: any }
 
   if (lead?.ai_active === false) return { ok: false, leadId: lead.id }
 
@@ -101,7 +101,7 @@ async function isAiAllowedForLead(tenantId: string, contactId: string): Promise<
     .from('ai_settings')
     .select('auto_response_enabled')
     .eq('tenant_id', tenantId)
-    .maybeSingle()
+    .maybeSingle() as { data: { auto_response_enabled: boolean } | null; error: any }
 
   if (aiCfg?.auto_response_enabled === false) return { ok: false, leadId: lead?.id }
 
@@ -133,7 +133,7 @@ export async function runAiAutoReply(input: TriggerAiAutoReplyInput): Promise<vo
     .from('conversations')
     .select('ai_enabled, mode')
     .eq('id', conversationId)
-    .maybeSingle()
+    .maybeSingle() as { data: { ai_enabled: boolean, mode: string } | null; error: any }
 
   if (!conv || !isConversationAiEnabled(conv)) {
     logger.info({ conversationId }, '[ai-auto-reply] Skipped — AI off for conversation')
@@ -162,7 +162,7 @@ export async function runAiAutoReply(input: TriggerAiAutoReplyInput): Promise<vo
     .select('sender_type, content')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true })
-    .limit(14)
+    .limit(14) as { data: { sender_type: string, content: string }[] | null; error: any }
 
   const history = (historyMsgs ?? []).map((m) => ({
     role: (m.sender_type === 'user' || m.sender_type === 'customer'
@@ -240,19 +240,17 @@ export async function runAiAutoReply(input: TriggerAiAutoReplyInput): Promise<vo
     metadata: { source: 'nextjs_ai_auto_reply', phone, raw_jid: rawJid },
   }
 
-  const { data: aiMsg, error: insertErr } = await admin
-    .from('messages')
+  const { data: aiMsg, error: insertErr } = await (admin.from('messages') as any)
     .insert(insertPayload)
     .select()
-    .single()
+    .single() as { data: any; error: any }
 
   if (insertErr) {
     logger.error({ insertErr, conversationId }, '[ai-auto-reply] Failed to save AI message')
     return
   }
 
-  await admin
-    .from('conversations')
+  await (admin.from('conversations') as any)
     .update({ last_message_at: new Date().toISOString() })
     .eq('id', conversationId)
 

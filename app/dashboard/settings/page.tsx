@@ -414,7 +414,7 @@ function SettingsPageContent() {
         const endorselyReferral = typeof window !== 'undefined' ? localStorage.getItem("endorsely_referral") || "" : "";
 
         // Register checkout event callback to immediately forward affiliate details to our API
-        paddleInstance.on('checkout.completed', async (data: any) => {
+        (paddleInstance as any).on('checkout.completed', async (data: any) => {
           console.log("🔔 [Paddle Checkout Client] Completion event captured:", data);
           const refId = typeof window !== 'undefined' ? localStorage.getItem("endorsely_referral") || "" : "";
           if (refId) {
@@ -682,7 +682,7 @@ function SettingsPageContent() {
                   <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#22C55E] to-[#16A34A] flex items-center justify-center text-white text-2xl font-extrabold shadow-md overflow-hidden relative border-2 border-white dark:border-[#111827] group-hover:scale-105 transition-all duration-300">
                     {config.avatar_url ? (
                       <img 
-                        src={config.avatar_url} 
+                        src={config.avatar_url as string} 
                         alt={config.full_name || "Profile Avatar"} 
                         className="w-full h-full object-cover"
                       />
@@ -732,7 +732,7 @@ function SettingsPageContent() {
                     <p className="text-xs font-semibold text-[#6B7280] dark:text-[#9CA3AF]">
                       Administrator • {config.personal_email}
                     </p>
-                    {config.avatar_url && (
+                    {!!config.avatar_url && (
                       <>
                         <span className="text-[#E5E7EB] dark:text-[#1F2937] text-xs">•</span>
                         <button
