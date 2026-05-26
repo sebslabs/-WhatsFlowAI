@@ -23,13 +23,19 @@ export async function expandKnowledgeIds(tenantId: string, rootIds: string[]): P
   const admin = getSupabaseAdmin()
   const expanded = new Set<string>(rootIds)
 
+  interface KnowledgeBaseRow {
+    id: string
+    title: string | null
+    metadata: Record<string, unknown> | null
+  }
+
   const { data: roots } = await admin
     .from('knowledge_base')
     .select('id, title, metadata')
     .eq('tenant_id', tenantId)
-    .in('id', rootIds)
+    .in('id', rootIds) as { data: KnowledgeBaseRow[] | null }
 
-  for (const root of roots ?? []) {
+  for (const root of (roots ?? []) as KnowledgeBaseRow[]) {
     expanded.add(root.id)
     const docId = (root.metadata as Record<string, unknown>)?.document_id as string | undefined
     if (docId) {

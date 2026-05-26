@@ -23,6 +23,17 @@ export interface TriggerAiAutoReplyInput {
   sendJid?: string
 }
 
+interface AIAgent {
+  id: string
+  name: string | null
+  role: string | null
+  tone: string | null
+  instructions: string | null
+  model: string | null
+  metadata: Record<string, unknown> | null
+  is_active: boolean | null
+}
+
 async function fetchActiveAgent(tenantId: string, conversationId: string) {
   const admin = getSupabaseAdmin()
   const { data: conv } = await admin
@@ -40,7 +51,7 @@ async function fetchActiveAgent(tenantId: string, conversationId: string) {
       .select('id, name, role, tone, instructions, model, metadata, is_active')
       .eq('id', selectedId)
       .eq('tenant_id', tenantId)
-      .maybeSingle()
+      .maybeSingle() as { data: AIAgent | null; error: any }
     if (agent?.is_active) return agent
   }
 
@@ -49,7 +60,7 @@ async function fetchActiveAgent(tenantId: string, conversationId: string) {
     .select('id, name, role, tone, instructions, model, metadata, is_active')
     .eq('tenant_id', tenantId)
     .eq('is_active', true)
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false }) as { data: AIAgent[] | null; error: any }
 
   if (!agents?.length) return null
   return (

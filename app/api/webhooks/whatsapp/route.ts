@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 // MEDIUM FIX (#9): Import shared HMAC verifier — same function used in tests.
 // Eliminates duplicate logic that could silently diverge between test and production.
 import { verifyWebhookHmac } from '@/lib/utils/webhook-hmac';
+import { timingSafeEqual } from 'crypto';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -26,7 +27,7 @@ function verifyInternalSecret(request: Request): boolean {
     const a = Buffer.from(authHeader, 'utf8');
     const b = Buffer.from(secret, 'utf8');
     if (a.length !== b.length) return false;
-    return crypto.timingSafeEqual(a, b);
+    return timingSafeEqual(a, b);
   } catch {
     return false;
   }

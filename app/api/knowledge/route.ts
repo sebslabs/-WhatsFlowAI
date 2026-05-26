@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
                   const contentMatch = m.match(/\(([^)]*)\)/);
                   if (contentMatch && contentMatch[1]) {
                     const cleanText = contentMatch[1]
-                      .replace(/\\([0-7]{3})/g, (_, octal) => String.fromCharCode(parseInt(octal, 8)))
+                      .replace(/\\([0-7]{3})/g, (_: string, octal: string) => String.fromCharCode(parseInt(octal, 8)))
                       .replace(/\\(.)/g, '$1');
                     parsedText += cleanText + ' ';
                   }

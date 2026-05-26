@@ -62,12 +62,19 @@ async function linkLeadsToContact(
   const db = getSupabaseAdmin();
   const variants = normalizePhoneVariants(phone);
 
+  interface Lead {
+    id: string
+    phone: string | null
+    contact_id: string | null
+    name?: string
+  }
+
   const { data: existing } = await db
     .from('leads')
     .select('id, phone, contact_id')
     .eq('tenant_id', tenantId)
     .eq('contact_id', contactId)
-    .maybeSingle();
+    .maybeSingle() as { data: Lead | null; error: any };
 
   if (existing) {
     const patch: { phone?: string; name?: string } = {};
@@ -85,7 +92,7 @@ async function linkLeadsToContact(
       .select('id, contact_id')
       .eq('tenant_id', tenantId)
       .eq('phone', variant)
-      .maybeSingle();
+      .maybeSingle() as { data: Lead | null; error: any };
 
     if (byPhone) {
       const leadPatch: { contact_id: string; name?: string } = { contact_id: contactId };

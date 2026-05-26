@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1. Verify webhooks and deserialize the payload safely.
-    const event = paddle.webhooks.unmarshal(
+    const event = await paddle.webhooks.unmarshal(
       rawBody,
       process.env.PADDLE_WEBHOOK_SECRET,
       signature

@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
         .select('metadata')
         .eq('id', agentId)
         .eq('tenant_id', tenantId)
-        .maybeSingle();
+        .maybeSingle() as { data: { metadata: Record<string, unknown> | null } | null; error: any };
       if (agent) {
         resolvedSourceIds = await resolveAllowedKnowledgeIds(
           tenantId,
