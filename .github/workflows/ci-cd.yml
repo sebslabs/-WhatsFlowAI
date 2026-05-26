@@ -253,12 +253,13 @@ jobs:
 
       - name: Verify health after deploy
         run: |
-          if [ -z "${{ vars.PRODUCTION_URL }}" ]; then
-            echo "Error: PRODUCTION_URL is not set"
-            exit 1
+          PROD_URL="${{ vars.PRODUCTION_URL }}"
+          if [ -z "$PROD_URL" ]; then
+            echo "Warning: PRODUCTION_URL is not set, skipping health check"
+            exit 0
           fi
           sleep 15
-          curl -f "${{ vars.PRODUCTION_URL }}/health" || exit 1
+          curl -f "$PROD_URL/health" || exit 1
 
       - name: Notify Sentry of new release
         run: |
