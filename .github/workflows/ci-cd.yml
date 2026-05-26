@@ -118,6 +118,7 @@ jobs:
         timeout-minutes: 5
 
       - name: Security penetration test
+        if: env.SUPABASE_URL != ''
         run: npm run validate:security
         working-directory: server
         timeout-minutes: 5
