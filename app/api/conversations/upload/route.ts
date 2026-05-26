@@ -72,7 +72,8 @@ export async function POST(request: NextRequest) {
         });
       }
     } catch (err) {
-      logger.warn('Failed ensuring bucket exists:', err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logger.warn('Failed ensuring bucket exists:', errorMessage);
     }
 
     // Namespace by tenant to enforce tenant isolation in storage
