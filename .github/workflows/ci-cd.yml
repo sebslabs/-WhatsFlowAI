@@ -253,6 +253,10 @@ jobs:
 
       - name: Verify health after deploy
         run: |
+          if [ -z "${{ vars.PRODUCTION_URL }}" ]; then
+            echo "Error: PRODUCTION_URL is not set"
+            exit 1
+          fi
           sleep 15
           curl -f "${{ vars.PRODUCTION_URL }}/health" || exit 1
 
