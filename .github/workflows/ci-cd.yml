@@ -42,8 +42,8 @@ jobs:
         run: npm ci
         working-directory: .
 
-      - name: Rebuild native modules for frontend
-        run: npm rebuild @rollup/rollup-linux-x64-gnu
+      - name: Install native modules for frontend
+        run: npm install @rollup/rollup-linux-x64-gnu --no-save
         working-directory: .
 
       - name: Next.js type check
