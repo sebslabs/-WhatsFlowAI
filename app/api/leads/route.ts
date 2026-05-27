@@ -37,18 +37,24 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const searchQuery = request.nextUrl.searchParams.get('search')?.trim() || '';
 
-    // RLS on the `leads` table automatically filters by organization_id.
-    // No need to manually .eq('organization_id', user.organizationId) — RLS does it.
-    const { data, error: dbError } = await supabase
+    let query = supabase
       .from('leads')
       .select('id, name, phone, email, service, stage, urgency, notes, created_at, updated_at')
       .eq('tenant_id', user.tenant_id)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (searchQuery) {
+      // Search by name OR phone (case-insensitive)
+      query = query.or(`name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%`);
+    }
+
+    const { data, error: dbError } = await query;
 
     if (dbError) throw dbError
 
-    logger.info({ userId: user.id, count: data?.length }, 'Leads fetched')
+    logger.info({ userId: user.id, count: data?.length, search: searchQuery || undefined }, 'Leads fetched')
     return NextResponse.json(data ?? [])
   } catch (err: any) {
     logger.error({ userId: user.id }, 'GET /api/leads failed', err)

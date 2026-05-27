@@ -42,6 +42,8 @@ export function TopBar() {
   const [open, setOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [leadResults, setLeadResults] = useState<any[]>([]);
+  const [leadSearching, setLeadSearching] = useState(false);
   const [waConfig, setWaConfig] = useState<any>(null);
   const [qrSession, setQrSession] = useState<any>(null);
   const [subData, setSubData] = useState<any>(null);
@@ -143,6 +145,14 @@ export function TopBar() {
     setSearchOpen(false);
   }, [pathname]);
 
+  // Clear lead results when search dialog closes
+  useEffect(() => {
+    if (!searchOpen) {
+      setSearchQuery('');
+      setLeadResults([]);
+    }
+  }, [searchOpen]);
+
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
@@ -153,6 +163,26 @@ export function TopBar() {
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
   }, []);
+
+  // Debounced lead search
+  useEffect(() => {
+    if (searchQuery.length < 2) {
+      setLeadResults([]);
+      return;
+    }
+    setLeadSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await apiFetch(`/api/leads?search=${encodeURIComponent(searchQuery)}`);
+        setLeadResults(Array.isArray(results) ? results.slice(0, 6) : []);
+      } catch {
+        setLeadResults([]);
+      } finally {
+        setLeadSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const searchResults = [
     { icon: MessageSquare, title: "Automations", description: "Manage your AI response flows", category: "Features", href: "/dashboard/automation" },
@@ -365,31 +395,73 @@ export function TopBar() {
 
                 {searchQuery.length > 0 ? (
                   <div className="space-y-0.5">
-                    {searchResults.length > 0 ? (
-                      searchResults.map((result, i) => (
-                        <button
-                          key={i}
-                          className="w-full flex items-center gap-3 p-2 hover:bg-[#F9FAFB] dark:hover:bg-[#0B0F1A] rounded-lg transition-colors group text-left"
-                          disabled={isNavigating}
-                          onClick={() => {
-                            setIsNavigating(true);
-                            router.push(result.href);
-                          }}
-                        >
-                          <div className="w-8 h-8 rounded-md bg-[#F9FAFB] dark:bg-[#0B0F1A] flex items-center justify-center text-[#6B7280] group-hover:text-[#22C55E] group-hover:bg-[#22C55E]/10 transition-colors">
-                            <result.icon className="w-4 h-4" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <h4 className="text-sm font-medium text-[#111827] dark:text-[#F9FAFB] truncate">{result.title}</h4>
-                              <span className="text-[10px] text-[#6B7280] dark:text-[#9CA3AF] font-medium">{result.category}</span>
+                    {/* Lead results */}
+                    {leadSearching ? (
+                      <div className="py-8 flex flex-col items-center justify-center gap-2">
+                        <Loader2 className="w-5 h-5 text-[#22C55E] animate-spin" />
+                        <span className="text-xs text-gray-400">Searching leads...</span>
+                      </div>
+                    ) : leadResults.length > 0 ? (
+                      <>
+                        <div className="px-2 py-1.5 text-[10px] font-bold text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-tight">
+                          Leads
+                        </div>
+                        {leadResults.map((lead) => (
+                          <button
+                            key={lead.id}
+                            className="w-full flex items-center gap-3 p-2 hover:bg-[#F9FAFB] dark:hover:bg-[#0B0F1A] rounded-lg transition-colors group text-left"
+                            disabled={isNavigating}
+                            onClick={() => {
+                              setIsNavigating(true);
+                              setSearchOpen(false);
+                              router.push(`/dashboard/leads`);
+                            }}
+                          >
+                            <div className="w-8 h-8 rounded-full bg-[#22C55E]/10 border border-[#22C55E]/20 flex items-center justify-center text-[#22C55E] shrink-0 font-bold text-xs">
+                              {lead.name?.charAt(0)?.toUpperCase() || '?'}
                             </div>
-                          </div>
-                        </button>
-                      ))
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <h4 className="text-sm font-semibold text-[#111827] dark:text-[#F9FAFB] truncate">{lead.name || 'Unknown'}</h4>
+                                {lead.stage && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#22C55E]/10 text-[#22C55E] shrink-0">{lead.stage}</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-400 truncate">{lead.phone || 'No phone'}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </>
+                    ) : searchResults.length > 0 ? (
+                      <>
+                        <div className="px-2 py-1.5 text-[10px] font-bold text-[#6B7280] dark:text-[#9CA3AF] uppercase tracking-tight">
+                          Pages
+                        </div>
+                        {searchResults.map((result, i) => (
+                          <button
+                            key={i}
+                            className="w-full flex items-center gap-3 p-2 hover:bg-[#F9FAFB] dark:hover:bg-[#0B0F1A] rounded-lg transition-colors group text-left"
+                            disabled={isNavigating}
+                            onClick={() => {
+                              setIsNavigating(true);
+                              router.push(result.href);
+                            }}
+                          >
+                            <div className="w-8 h-8 rounded-md bg-[#F9FAFB] dark:bg-[#0B0F1A] flex items-center justify-center text-[#6B7280] group-hover:text-[#22C55E] group-hover:bg-[#22C55E]/10 transition-colors">
+                              <result.icon className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <h4 className="text-sm font-medium text-[#111827] dark:text-[#F9FAFB] truncate">{result.title}</h4>
+                                <span className="text-[10px] text-[#6B7280] dark:text-[#9CA3AF] font-medium">{result.category}</span>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </>
                     ) : (
                       <div className="py-10 text-center">
-                        <p className="text-sm text-gray-500">No results for "{searchQuery}"</p>
+                        <p className="text-sm text-gray-500">No leads or pages found for "{searchQuery}"</p>
                       </div>
                     )}
                   </div>
