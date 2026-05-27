@@ -337,8 +337,8 @@ export async function DELETE(request: NextRequest) {
           const filePath = pathSegments.slice(kbIndex + 1).map(decodeURIComponent).join('/');
           await supabase.storage.from('knowledge-base').remove([filePath]);
         }
-      } catch (e) {
-        logger.warn('[knowledge] Failed to remove file from storage:', e);
+      } catch (e: any) {
+        logger.warn({ err: e?.message }, '[knowledge] Failed to remove file from storage');
       }
     }
 
