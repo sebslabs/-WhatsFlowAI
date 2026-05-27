@@ -46,6 +46,7 @@
     "nodemon": "^3.1.14",
     "openai": "^6.35.0",
     "playwright": "^1.60.0",
+    "qrcode": "^1.5.4",
     "redis": "^5.12.1",
     "socket.io": "^4.8.3",
     "typescript": "^6.0.3",
@@ -55,6 +56,7 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/morgan": "^1.9.10",
+    "@types/qrcode": "^1.5.6",
     "@types/socket.io": "^3.0.1",
     "tsx": "^4.21.0"
   }

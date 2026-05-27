@@ -10,7 +10,8 @@ import {
   type WASocket,
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../index.js';
+import { logger } from '../utils/logger.js';
 import { mkdir, rm } from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -20,7 +21,7 @@ import {
   extractPushName,
   phoneToJid,
   resolveInboundMessageJid,
-} from '@/lib/whatsapp-message-utils';
+} from '../utils/whatsapp-message-utils.js';
 
 const globalForBaileys = global as unknown as {
   baileysSessions?: Map<string, WASocket>;
@@ -28,11 +29,6 @@ const globalForBaileys = global as unknown as {
 
 const sessions = globalForBaileys.baileysSessions ?? new Map<string, WASocket>();
 globalForBaileys.baileysSessions = sessions;
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const sessionHadQr = new Map<string, boolean>();
 let authStoreBackend: 'supabase' | 'filesystem' | null = null;
@@ -167,38 +163,7 @@ function bindMessageListener(sock: WASocket, tenantId: string, sessionId: string
         const { rawJid, phone, sendJid } = resolved;
         const pushName = extractPushName(msg, fromMe);
 
-        const payload = {
-          wa_message_id: messageId,
-          phone,
-          raw_jid: rawJid,
-          name: pushName || 'Unknown',
-          content: text,
-          sender_type: fromMe ? 'agent' : 'customer',
-        };
-        console.log('[Baileys-QR] Dispatching message payload to background queue:', payload);
-
-        // INBOX FIX: Persist in Next.js immediately so customer messages appear even if
-        // Express/Redis/BullMQ is offline. Express queue still handles AI auto-reply.
-        import('@/lib/inbox-persist')
-          .then(({ persistBaileysMessage }) =>
-            persistBaileysMessage({
-              tenantId,
-              messageId,
-              phone,
-              rawJid,
-              sendJid,
-              sessionId,
-              pushName,
-              text,
-              fromMe,
-              rawMessage: msg.message,
-            })
-          )
-          .catch((err) =>
-            console.error('[Baileys-QR] Inbox persist failed:', err)
-          );
-
-        dispatchIncomingMessageToQueue(
+        await dispatchIncomingMessageToQueue(
           tenantId,
           sessionId,
           sendJid,
@@ -209,7 +174,7 @@ function bindMessageListener(sock: WASocket, tenantId: string, sessionId: string
           text,
           fromMe,
           msg.message
-        ).catch((err) => console.error('[Baileys-QR] Queue dispatch failed:', err));
+        );
       } catch (err) {
         console.error('[Baileys-QR] messages.upsert loop error:', err);
       }
@@ -382,7 +347,7 @@ export async function getBaileysSession(tenantId: string, sessionId: string): Pr
 
   const sock = makeWASocket({
     version,
-    logger: pino({ level: 'silent' }) as any,
+    logger: logger as any,
     printQRInTerminal: false,
     auth: state,
     browser: Browsers.macOS('Desktop'),
@@ -550,51 +515,26 @@ async function dispatchIncomingMessageToQueue(
   fromMe: boolean,
   rawMessage?: any
 ): Promise<void> {
-  const apiUrl = process.env.API_URL || 'http://localhost:5000';
-  const internalKey = process.env.INTERNAL_API_KEY;
-
-  if (!internalKey) {
-    console.error(
-      '[Baileys-QR] INTERNAL_API_KEY is not set — messages will NOT appear in the inbox. ' +
-        'Set the same INTERNAL_API_KEY in .env.local (Next.js) and server/.env, then run the Express server (port 5000) and Redis.'
-    );
-    return;
-  }
-
   try {
-    const res = await fetch(`${apiUrl}/api/internal/baileys/enqueue`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Internal-Key': internalKey,
-      },
-      body: JSON.stringify({
-        tenantId,
-        sessionId,
-        sendJid,
-        rawJid,
-        messageId,
-        phone,
-        pushName,
-        text,
-        fromMe,
-        rawMessage,
-      }),
+    const { getBaileysQueue } = await import('./baileys-queue.js');
+    const queue = getBaileysQueue();
+    await queue.add('process-baileys-message', {
+      tenantId,
+      sessionId,
+      sendJid,
+      rawJid,
+      messageId,
+      phone,
+      pushName,
+      text,
+      fromMe,
+      rawMessage,
+    }, {
+      jobId: `baileys-${messageId}`,
     });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      console.error(
-        `[Baileys-QR] Queue dispatch failed (${res.status}). Inbox will not update until Express + Redis are running. ${body}`
-      );
-    } else {
-      console.log('[Baileys-QR] Message successfully dispatched to background BullMQ queue', {
-        messageId,
-        phone,
-      });
-    }
+    console.log('[Baileys-QR] Message successfully dispatched to local BullMQ queue', { messageId, phone });
   } catch (err: any) {
-    console.error('[Baileys-QR] Failed to connect to Express enqueue endpoint:', err.message);
+    console.error('[Baileys-QR] Failed to enqueue message locally:', err.message);
   }
 }
 

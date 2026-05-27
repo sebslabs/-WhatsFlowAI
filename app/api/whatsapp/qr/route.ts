@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthApi } from "@/lib/auth";
 import { createClient } from "@supabase/supabase-js";
-import { initActiveSessions, startBaileysSession, waitForSessionQr } from "@/lib/whatsapp-qr";
 
-/** Baileys QR generation can take up to ~45s while waiting for WhatsApp. */
 export const maxDuration = 60;
 
 const supabase = createClient(
@@ -15,9 +13,6 @@ export async function GET(request: NextRequest) {
   try {
     const { user, supabase: userSupabase, error: authError } = await requireAuthApi(request);
     if (authError || !user || !userSupabase) return authError || NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    // Background self-heal: ensure active sessions are in-memory
-    initActiveSessions().catch(console.error);
 
     const { data, error } = await userSupabase
       .from("whatsapp_qr_sessions")
@@ -55,20 +50,31 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    // Start Baileys, then wait until QR is written to DB (keeps the route alive in serverless)
-    try {
-      await startBaileysSession(user.tenant_id, data.id);
-      const ready = await waitForSessionQr(data.id);
-      return NextResponse.json({ ...data, ...ready });
-    } catch (waitErr: any) {
-      console.error('[whatsapp/qr] Baileys session failed:', waitErr);
-      return NextResponse.json({
-        ...data,
-        status: 'error',
-        error_message: waitErr.message || 'QR generation timed out',
-      });
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
+    const internalKey = process.env.INTERNAL_API_KEY || '';
+
+    // Proxy QR generation to the long-running Express backend
+    const res = await fetch(`${apiUrl}/api/internal/baileys/qr`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Key': internalKey,
+      },
+      body: JSON.stringify({
+        tenantId: user.tenant_id,
+        sessionId: data.id
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Backend QR generation failed HTTP ${res.status}: ${errText}`);
     }
+
+    const readyData = await res.json();
+    return NextResponse.json({ ...data, ...readyData });
   } catch (error: any) {
+    console.error('[whatsapp/qr] POST error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

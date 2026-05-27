@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthApi } from "@/lib/auth";
 import { createClient } from "@supabase/supabase-js";
-import { disconnectBaileysSession } from "@/lib/whatsapp-qr";
+
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,8 +15,14 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     const sessionId = params.id;
 
-    // Disconnect baileys
-    await disconnectBaileysSession(sessionId);
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
+    const internalKey = process.env.INTERNAL_API_KEY || '';
+
+    // Disconnect baileys on backend
+    await fetch(`${apiUrl}/api/internal/baileys/qr/${sessionId}`, {
+      method: 'DELETE',
+      headers: { 'X-Internal-Key': internalKey }
+    });
 
     // Delete from DB
     const { error } = await userSupabase

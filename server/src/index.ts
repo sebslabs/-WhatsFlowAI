@@ -184,6 +184,10 @@ export { getQueue } from './services/queue.enterprise.js'
     // 1. Pre-flight: env, schema, Redis connectivity
     await validateStartup()
 
+    // 1.5 Start Baileys sockets
+    const { initActiveSessions } = await import('./services/whatsapp-qr.service.js')
+    initActiveSessions().catch(err => logger.error('Failed to init Baileys sessions', err))
+
     // 2. Start WebSocket + Redis adapter
     io = await createRealtimeServer(httpServer)
 

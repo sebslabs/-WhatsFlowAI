@@ -414,51 +414,20 @@ async function runAiAutoReply(
   }
 
   let messageId: string | null = null
-  let socketSent = false
 
   try {
-    const { getBaileysSession } = require('@/lib/whatsapp-qr')
+    const { getBaileysSession } = await import('../services/whatsapp-qr.service.js')
     const sock = await getBaileysSession(tenantId, sessionId)
     if (sock) {
       const sent = await sock.sendMessage(sendJid, { text: reply })
       messageId = sent?.key?.id || null
-      socketSent = true
-      logger.info('[BaileysWorker] Successfully sent direct socket update message without HTTP loop!')
+      logger.info('[BaileysWorker] Successfully sent AI reply message via local socket!')
+    } else {
+      logger.warn('[BaileysWorker] Could not get Baileys Session')
     }
   } catch (err: any) {
-    logger.debug('[BaileysWorker] Local socket lookup/send bypassed: ' + err.message)
-  }
-
-  if (!socketSent) {
-    const nextjsUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://127.0.0.1:3000'}/api/internal/baileys/send`
-    const internalKey = process.env.INTERNAL_API_KEY || ''
-
-    try {
-      const res = await fetch(nextjsUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Internal-Key': internalKey,
-          'x-internal-secret': process.env.WEBHOOK_INTERNAL_SECRET || '',
-        },
-        body: JSON.stringify({
-          tenantId,
-          sessionId,
-          jid: sendJid,
-          text: reply,
-        }),
-      })
-
-      if (!res.ok) {
-        throw new Error(`Failed to dispatch outbound send via NextJS. HTTP ${res.status}`)
-      }
-
-      const resData = (await res.json()) as any
-      messageId = resData.messageId
-    } catch (err: any) {
-      logger.error('Failed to dispatch Baileys outbound AI response:', { err: err.message })
-      return
-    }
+    logger.error('Failed to dispatch Baileys outbound AI response:', { err: err.message })
+    return
   }
 
     const { data: aiMsg, error: outboundErr } = await supabase

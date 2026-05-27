@@ -113,35 +113,36 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (qrSession) {
-      const { getBaileysSession } = await import('@/lib/whatsapp-qr');
-      const sock = await getBaileysSession(user.tenant_id, qrSession.id);
-      
-      if (!sock) {
-        throw new Error("WhatsApp QR socket disconnected. Please reconnect from settings.");
-      }
-
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
+      const internalKey = process.env.INTERNAL_API_KEY || '';
       const formattedJid = `${phoneNumber.replace(/\D/g, '')}@s.whatsapp.net`;
       
-      let sentResult = null;
-      if (messageType === 'image') {
-        sentResult = await sock.sendMessage(formattedJid, { image: { url: mediaUrl }, caption: content || '' });
-      } else if (messageType === 'document') {
-        sentResult = await sock.sendMessage(formattedJid, { 
-          document: { url: mediaUrl }, 
-          mimetype: mimeType || 'application/octet-stream', 
-          fileName: fileName || 'Document' 
-        });
-      } else if (messageType === 'audio') {
-        sentResult = await sock.sendMessage(formattedJid, {
-          audio: { url: mediaUrl },
-          mimetype: mimeType || 'audio/ogg; codecs=opus',
-          ptt: true
-        });
-      } else {
-        sentResult = await sock.sendMessage(formattedJid, { text: content });
+      const backendResponse = await fetch(`${apiUrl}/api/internal/baileys/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Key': internalKey,
+        },
+        body: JSON.stringify({
+          tenantId: user.tenant_id,
+          sessionId: qrSession.id,
+          jid: formattedJid,
+          text: content,
+          messageType,
+          mediaUrl,
+          mimeType,
+          fileName
+        }),
+      });
+
+      if (!backendResponse.ok) {
+        const errorData = await backendResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Baileys send gateway fault (HTTP ${backendResponse.status})`);
       }
 
-      const sentMsgId = sentResult?.key?.id || null;
+      const backendResult = await backendResponse.json();
+      const sentMsgId = backendResult.messageId || null;
+
       let insertedMsg = null;
       
       const fullInsert = await supabase
