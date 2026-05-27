@@ -25,6 +25,16 @@ let _flowQueue: Queue<ResumeFlowJobPayload> | null = null;
 export function getFlowQueue(): Queue<ResumeFlowJobPayload> {
   if (_flowQueue) return _flowQueue;
 
+  if (process.env.SKIP_REDIS === 'true') {
+    return new Proxy({} as Queue<ResumeFlowJobPayload>, {
+      get(_, prop) {
+        return () => {
+          console.warn(`[Redis Skipped] Attempted to access Queue.${String(prop)} during build`);
+        };
+      }
+    });
+  }
+
   _flowQueue = new Queue<ResumeFlowJobPayload>(FLOW_QUEUE_NAME, {
     connection: createRedisConnection(),
     defaultJobOptions: {

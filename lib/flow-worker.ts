@@ -57,6 +57,16 @@ export function startFlowResumeWorker(): Worker<ResumeFlowJobPayload> {
     return globalForFlowWorker.flowResumeWorker;
   }
 
+  if (process.env.SKIP_REDIS === 'true') {
+    return new Proxy({} as Worker<ResumeFlowJobPayload>, {
+      get(_, prop) {
+        return () => {
+          console.warn(`[Redis Skipped] Attempted to access Worker.${String(prop)} during build`);
+        };
+      }
+    });
+  }
+
   const worker = new Worker<ResumeFlowJobPayload>(FLOW_QUEUE_NAME, processResumeFlowJob, {
     connection: createRedisConnection(),
     concurrency: 5,
