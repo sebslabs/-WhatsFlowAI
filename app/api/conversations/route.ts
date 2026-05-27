@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthApi } from '@/lib/auth';
 import { logger } from '@/lib/logger';
-import { initActiveSessions } from '@/lib/whatsapp-qr';
 import { normalizePhoneVariants } from '@/lib/inbox-resolve';
 
 export async function GET(request: NextRequest) {
   const { user, supabase, error } = await requireAuthApi(request);
   if (error) return error;
 
-  // Background self-heal: ensure active QR sessions are loaded when inbox is requested
-  initActiveSessions().catch(err => logger.error('QR self-heal fail', err));
+  // Background self-heal: ensure active sessions are handled by backend
+  // (Leaving this space blank since it's backend's job now)
 
   try {
     // 1. Retrieve all leads registered to this tenant
