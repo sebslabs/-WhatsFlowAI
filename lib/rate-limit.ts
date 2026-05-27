@@ -72,11 +72,8 @@ async function checkRateLimit(
     }
   } catch (error) {
     console.error(`[RateLimit] Limiter execution error for prefix ${config.prefix}:`, error)
-    // Fail-closed in production to prevent DDoS / cost explosion when Upstash/Redis is down
-    if (process.env.NODE_ENV === 'production') {
-      return { success: false, limit: config.limit, remaining: 0, reset: Date.now() + 60000 }
-    }
-    // Fail-open in non-production/development
+    // Fail-open: routes are already protected by auth (JWT) or internal key (X-Internal-Key).
+    // Blocking all traffic when Redis has a temporary error is worse than allowing requests through.
     return { success: true, limit: config.limit, remaining: 1, reset: 0 }
   }
 }

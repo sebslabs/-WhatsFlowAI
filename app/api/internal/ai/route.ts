@@ -22,8 +22,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // 2. Parse request payload
-    const body = await req.json();
+    // 2. Parse request payload — read as text first to surface parse errors clearly
+    const rawBody = await req.text();
+    let body: any;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      logger.error({ rawBody: rawBody?.slice(0, 200) }, '[Internal AI Route] Invalid JSON body received from Fly.io backend');
+      return NextResponse.json({ error: 'Invalid JSON body', code: 'INVALID_JSON' }, { status: 400 });
+    }
+
     const {
       message,
       systemPrompt,
@@ -74,6 +82,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(response);
   } catch (err: any) {
+    logger.error({ err: err?.message, stack: err?.stack }, '[Internal AI Route] Unhandled exception');
     return handleApiError(err, 'Failed to process AI request');
   }
 }
