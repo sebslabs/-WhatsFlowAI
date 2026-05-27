@@ -26,7 +26,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: |
+            server/package-lock.json
+            package-lock.json
 
       - name: Install server deps
         run: npm ci
@@ -59,7 +61,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: |
+            server/package-lock.json
+            package-lock.json
 
       # MEDIUM FIX (#8): npm audit now BLOCKS deployment on high/critical CVEs.
       # The pipeline will exit non-zero if any high/critical vulnerability is found.
