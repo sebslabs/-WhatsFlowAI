@@ -45,6 +45,7 @@ export function TopBar() {
   const [waConfig, setWaConfig] = useState<any>(null);
   const [qrSession, setQrSession] = useState<any>(null);
   const [subData, setSubData] = useState<any>(null);
+  const [activeLeadCount, setActiveLeadCount] = useState<number>(0);
   const [profile, setProfile] = useState<{ full_name?: string; personal_email?: string; avatar_url?: string } | null>(null);
   const [showDisconnectAlert, setShowDisconnectAlert] = useState(false);
   const [waLoaded, setWaLoaded] = useState(false);
@@ -101,6 +102,9 @@ export function TopBar() {
       if (data) {
         if (data.active_subscription) {
           setSubData(data.active_subscription);
+        }
+        if (typeof data.active_lead_count === 'number') {
+          setActiveLeadCount(data.active_lead_count);
         }
         setProfile({
           full_name: data.full_name,
@@ -461,20 +465,20 @@ export function TopBar() {
                 <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 dark:text-gray-400">
                   <span>Active Leads</span>
                   <span className={cn(
-                    subData.ai_conversation_used / subData.ai_conversation_limit >= 0.8 ? "text-amber-500 font-extrabold" : "",
-                    subData.ai_conversation_used >= subData.ai_conversation_limit ? "text-red-500 font-extrabold" : ""
+                    activeLeadCount / subData.ai_conversation_limit >= 0.8 ? "text-amber-500 font-extrabold" : "",
+                    activeLeadCount >= subData.ai_conversation_limit ? "text-red-500 font-extrabold" : ""
                   )}>
-                    {subData.ai_conversation_used?.toLocaleString()} / {subData.ai_conversation_limit?.toLocaleString()}
+                    {activeLeadCount.toLocaleString()} / {subData.ai_conversation_limit?.toLocaleString()}
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-500",
-                      subData.ai_conversation_used / subData.ai_conversation_limit >= 1.0 ? "bg-red-500" :
-                      subData.ai_conversation_used / subData.ai_conversation_limit >= 0.8 ? "bg-amber-500" : "bg-[#22C55E]"
+                      activeLeadCount / (subData.ai_conversation_limit || 1500) >= 1.0 ? "bg-red-500" :
+                      activeLeadCount / (subData.ai_conversation_limit || 1500) >= 0.8 ? "bg-amber-500" : "bg-[#22C55E]"
                     )}
-                    style={{ width: `${Math.min(100, ((subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (activeLeadCount / (subData.ai_conversation_limit || 1500)) * 100)}%` }}
                   />
                 </div>
               </div>

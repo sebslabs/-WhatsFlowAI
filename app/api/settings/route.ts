@@ -139,9 +139,22 @@ export async function GET(request: NextRequest) {
       logger.warn({ tenantId: user.tenant_id, error: payHistErr.message }, 'Failed to query payment history')
     }
 
+    // 4. Fetch real active lead count for the TopBar display
+    let activeLeadCount = 0;
+    try {
+      const { count } = await supabase
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', user.tenant_id);
+      activeLeadCount = count ?? 0;
+    } catch (leadCountErr) {
+      logger.warn({ userId: user.id }, 'Lead count fetch failed gracefully');
+    }
+
     return NextResponse.json({
       ...config,
-      tenant_id: user.tenant_id, // Expose securely to frontend for billing/support contexts
+      tenant_id: user.tenant_id,
+      active_lead_count: activeLeadCount,
       active_subscription: subscription,
       payment_history: paymentHistory
     })
