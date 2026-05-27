@@ -46,6 +46,10 @@ jobs:
         run: npx tsc --noEmit
         working-directory: .
 
+      - name: Rebuild Rollup native modules
+        run: npm rebuild @rollup/rollup-linux-x64-gnu || true
+        working-directory: .
+
       - name: Unit tests (Vitest)
         run: npm test
         working-directory: .
