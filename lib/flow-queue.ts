@@ -43,8 +43,9 @@ export function getFlowQueue(): Queue<ResumeFlowJobPayload> {
         type: 'exponential',
         delay: 2000,
       },
-      removeOnComplete: { count: 500 },
-      removeOnFail: { count: 500 },
+      // OPTIMIZATION: Reduced from count:500 each.
+      removeOnComplete: { count: 50,  age: 3_600  },
+      removeOnFail:     { count: 20,  age: 86_400 },
     },
   });
 

@@ -349,7 +349,7 @@ export function TopBar() {
           )}
         </div>
 
-        {/* Center Section: Search Bar */}
+        {/* Center Section: Search Bar (desktop) */}
         <div className="hidden md:flex flex-1 items-center justify-center px-4 max-w-md mx-auto">
           <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
             <DialogTrigger asChild>
@@ -360,15 +360,15 @@ export function TopBar() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px] p-0 gap-0 overflow-hidden border-none shadow-2xl rounded-2xl bg-white dark:bg-[#111827] [&>button]:hidden">
               <div className="flex items-center px-4 py-1 border-b border-gray-100 dark:border-[#1F2937] bg-white dark:bg-[#111827]">
-                <Search className="w-4 h-4 text-gray-400" />
+                <Search className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                 <Input
                   placeholder="Search..."
-                  className="border-none focus-visible:ring-0 focus-visible:ring-offset-0 outline-none text-sm h-12 bg-transparent placeholder:text-gray-400 font-medium"
+                  className="border-none focus-visible:ring-0 focus-visible:ring-offset-0 outline-none text-sm h-12 bg-transparent text-[#111827] dark:text-[#F9FAFB] placeholder:text-gray-400 font-medium"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   autoFocus
                 />
-                <kbd className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border border-gray-100 bg-gray-50/50 px-1.5 font-mono text-[9px] font-medium text-gray-400 opacity-100">
+                <kbd className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border border-gray-100 dark:border-[#1F2937] bg-gray-50/50 dark:bg-gray-800/50 px-1.5 font-mono text-[9px] font-medium text-gray-400 dark:text-gray-500 opacity-100">
                   <span className="text-[10px]">esc</span>
                 </kbd>
               </div>
@@ -501,7 +501,18 @@ export function TopBar() {
         </div>
 
         {/* Right Section: Actions + Theme Toggle Switch */}
-        <div className="flex items-center justify-end gap-1.5 sm:gap-3 shrink-0">
+        <div className="flex items-center justify-end gap-1 sm:gap-1.5 shrink-0">
+          {/* Mobile Search Icon */}
+          <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+            <DialogTrigger asChild>
+              <button
+                className="md:hidden p-2 rounded-xl text-[#6B7280] dark:text-[#9CA3AF] hover:bg-[#F9FAFB] dark:hover:bg-[#111827] hover:text-[#22C55E] transition-colors"
+                aria-label="Search"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+            </DialogTrigger>
+          </Dialog>
           {/* Real-time subscription, trial days remaining and AI conversation progress bar */}
           {subData && (
             <div className="hidden lg:flex items-center gap-3 bg-gray-50 dark:bg-[#111827] px-3 py-1.5 rounded-xl border border-[#E5E7EB] dark:border-[#1F2937] text-xs">
@@ -535,22 +546,22 @@ export function TopBar() {
                 title="View Billing Settings"
               >
                 <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 dark:text-gray-400">
-                  <span>Active Leads</span>
+                  <span>AI Usage</span>
                   <span className={cn(
-                    activeLeadCount / subData.ai_conversation_limit >= 0.8 ? "text-amber-500 font-extrabold" : "",
-                    activeLeadCount >= subData.ai_conversation_limit ? "text-red-500 font-extrabold" : ""
+                    (subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500) >= 0.8 ? "text-amber-500 font-extrabold" : "",
+                    (subData.ai_conversation_used || 0) >= (subData.ai_conversation_limit || 1500) ? "text-red-500 font-extrabold" : ""
                   )}>
-                    {activeLeadCount.toLocaleString()} / {subData.ai_conversation_limit?.toLocaleString()}
+                    {(subData.ai_conversation_used || 0).toLocaleString()} / {subData.ai_conversation_limit?.toLocaleString() || '1,500'}
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-500",
-                      activeLeadCount / (subData.ai_conversation_limit || 1500) >= 1.0 ? "bg-red-500" :
-                      activeLeadCount / (subData.ai_conversation_limit || 1500) >= 0.8 ? "bg-amber-500" : "bg-[#22C55E]"
+                      (subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500) >= 1.0 ? "bg-red-500" :
+                      (subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500) >= 0.8 ? "bg-amber-500" : "bg-[#22C55E]"
                     )}
-                    style={{ width: `${Math.min(100, (activeLeadCount / (subData.ai_conversation_limit || 1500)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500)) * 100)}%` }}
                   />
                 </div>
               </div>

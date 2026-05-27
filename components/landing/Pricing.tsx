@@ -112,10 +112,10 @@ export function Pricing() {
           </p>
 
           {/* Billing toggle */}
-          <div className="inline-flex items-center bg-white border border-[#E2EDE2] rounded-xl p-1.5 gap-1.5 shadow-sm">
+          <div className="inline-flex items-center bg-white border border-[#E2EDE2] rounded-xl p-1 gap-1 shadow-sm flex-wrap justify-center">
             <button
               onClick={() => setBilling("monthly")}
-              className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${
+              className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
                 billing === "monthly"
                   ? "bg-[#16A34A] text-white shadow-md shadow-green-500/20"
                   : "text-[#6B7B6B] hover:text-[#0F1F0F]"
@@ -125,7 +125,7 @@ export function Pricing() {
             </button>
             <button
               onClick={() => setBilling("annual")}
-              className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${
+              className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
                 billing === "annual"
                   ? "bg-[#16A34A] text-white shadow-md shadow-green-500/20"
                   : "text-[#6B7B6B] hover:text-[#0F1F0F]"
@@ -135,13 +135,13 @@ export function Pricing() {
             </button>
             <button
               onClick={() => setBilling("onetime")}
-              className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${
+              className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
                 billing === "onetime"
                   ? "bg-[#16A34A] text-white shadow-md shadow-green-500/20"
                   : "text-[#6B7B6B] hover:text-[#0F1F0F]"
               }`}
             >
-              One-time setup
+              One-time
             </button>
           </div>
         </motion.div>

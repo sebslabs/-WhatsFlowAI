@@ -379,7 +379,7 @@ async function processWebhookJob(job: Job<WebhookJobData>): Promise<void> {
   }
 }
 
-// ── BullMQ Worker Config ───────────────────────────────────────────────────────
+// ── BullMQ Worker Config ─────────────────────────────────────────────────────────
 const worker = new Worker<WebhookJobData>(QUEUE_NAME, processWebhookJob, {
   connection,
   concurrency: 5,
@@ -387,6 +387,14 @@ const worker = new Worker<WebhookJobData>(QUEUE_NAME, processWebhookJob, {
     max: 50,
     duration: 1000,
   },
+  // OPTIMIZATION: Reduce idle Redis polling.
+  // stalledInterval: how often to check for stalled jobs (default 30s → 60s saves ~50% background commands).
+  // lockDuration / lockRenewTime: keep lock long enough to not stall on slow AI calls.
+  // drainDelay: ms to sleep when the queue is empty (reduces BLPOP/poll frequency).
+  stalledInterval: 60_000,
+  lockDuration:    60_000,
+  lockRenewTime:   30_000,
+  drainDelay:      10,
 });
 
 worker.on('completed', (job) => {

@@ -1,24 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { redis } from '@/lib/redis'
-import { Ratelimit } from '@upstash/ratelimit'
+import { checkRateLimit } from '@/lib/memory-cache'
 
 /**
- * Enterprise-grade rate limiter backed by Upstash Redis (sliding-window algorithm).
+ * lib/rate-limit.ts  — Next.js Edge / API-route rate limiter
  *
- * Enforces per tenant_id + user_id limits to guarantee tenant isolation and safety.
+ * SWITCHED from Upstash Redis to in-process LRU cache (lib/memory-cache.ts).
  *
- * Uses centralized Redis client singleton and statically compiled Ratelimit caches
- * to achieve zero execution latency and eliminate redundant runtime object allocation.
+ * Before : every rate-limit check = 1 Redis GET + 1 Redis SET via Upstash REST
+ * After  : every rate-limit check = O(1) HashMap lookup — zero network I/O
+ *
+ * Trade-off acknowledged:
+ *   Single-process deployments (Vercel serverless, single EC2, etc.) → identical
+ *   protection. Multi-instance deployments (e.g. 3 Next.js replicas) → each
+ *   instance tracks its own window, so the effective limit is limit × instances.
+ *   For a single-tenant SaaS at this scale this is acceptable and vastly cheaper
+ *   than paying Upstash for 300K+ rate-limit commands per day.
+ *
+ * Redis (Upstash) is now reserved exclusively for:
+ *   - BullMQ active jobs  (ioredis TCP connection)
+ *   - RAG embedding cache (Upstash REST, 24h TTL)
  */
-
-interface RateLimitConfig {
-  /** Maximum requests per window */
-  limit: number
-  /** Window duration in seconds */
-  windowSec: number
-  /** Identifier prefix (e.g. 'api', 'auth', 'webhook', 'ai') */
-  prefix: string
-}
 
 interface RateLimitResult {
   success: boolean
@@ -27,110 +28,59 @@ interface RateLimitResult {
   reset: number
 }
 
-// Caching singletons to prevent connection pool exhaustion
-const ratelimitSingletons = new Map<string, Ratelimit>()
-
 /**
- * Returns the cached Ratelimit instance for the specific config.
+ * Derives a stable rate-limit key from tenant_id + user_id / IP.
+ * Falls back to IP isolation for unauthenticated requests.
  */
-function getRatelimit(config: RateLimitConfig): Ratelimit {
-  const cacheKey = `${config.prefix}:${config.limit}:${config.windowSec}`
-  let ratelimit = ratelimitSingletons.get(cacheKey)
-
-  if (!ratelimit) {
-    ratelimit = new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(config.limit, `${config.windowSec} s`),
-      prefix: `whatsflow:${config.prefix}`,
-      analytics: true,
-    })
-    
-    ratelimitSingletons.set(cacheKey, ratelimit)
-  }
-  
-  return ratelimit
-}
-
-async function checkRateLimit(
-  identifier: string,
-  config: RateLimitConfig
-): Promise<RateLimitResult> {
-  // Skip rate limiting in development if Upstash is not configured
-  if (!process.env.UPSTASH_REDIS_REST_URL) {
-    return { success: true, limit: config.limit, remaining: config.limit, reset: 0 }
-  }
-
-  try {
-    const ratelimit = getRatelimit(config)
-    const result = await ratelimit.limit(identifier)
-    
-    return {
-      success: result.success,
-      limit: result.limit,
-      remaining: result.remaining,
-      reset: result.reset,
-    }
-  } catch (error) {
-    console.error(`[RateLimit] Limiter execution error for prefix ${config.prefix}:`, error)
-    // Fail-open: routes are already protected by auth (JWT) or internal key (X-Internal-Key).
-    // Blocking all traffic when Redis has a temporary error is worse than allowing requests through.
-    return { success: true, limit: config.limit, remaining: 1, reset: 0 }
-  }
-}
-
-/**
- * Derives a secure rate limit identifier based on tenant_id + user_id context.
- * Falls back to IP isolation if the request is unauthenticated.
- */
-function getTenantUserIdentifier(request: NextRequest): string {
+function getIdentifier(prefix: string, request: NextRequest): string {
   const tenantId = request.headers.get('x-tenant-id') || 'system'
-  const userId = request.headers.get('x-user-id')
-  
-  if (userId) {
-    return `tenant:${tenantId}:user:${userId}`
-  }
+  const userId   = request.headers.get('x-user-id')
+
+  if (userId) return `${prefix}:tenant:${tenantId}:user:${userId}`
 
   const forwarded = request.headers.get('x-forwarded-for')
   const ip = forwarded ? forwarded.split(',')[0].trim() : 'unknown'
-  return `tenant:${tenantId}:ip:${ip}`
+  return `${prefix}:tenant:${tenantId}:ip:${ip}`
 }
 
-// ── Rate Limit Configurations per request type ─────────────────────────────────
+// ── Public rate-limit helpers ──────────────────────────────────────────────────
 
-export async function rateLimitAuth(request: NextRequest) {
-  return checkRateLimit(getTenantUserIdentifier(request), {
-    limit: 10,
-    windowSec: 60,
-    prefix: 'auth',
-  })
+/** 10 req / 60 s — auth endpoints (login, 2FA, password reset) */
+export async function rateLimitAuth(request: NextRequest): Promise<RateLimitResult> {
+  return checkRateLimit(getIdentifier('auth', request), 10, 60_000)
 }
 
-export async function rateLimitApi(request: NextRequest) {
-  return checkRateLimit(getTenantUserIdentifier(request), {
-    limit: 120,
-    windowSec: 60,
-    prefix: 'api',
-  })
+/** 120 req / 60 s — standard authenticated API routes */
+export async function rateLimitApi(request: NextRequest): Promise<RateLimitResult> {
+  return checkRateLimit(getIdentifier('api', request), 120, 60_000)
 }
 
-export async function rateLimitWebhook(request: NextRequest) {
-  return checkRateLimit(getTenantUserIdentifier(request), {
-    limit: 100, // Max 100 requests/minute
-    windowSec: 60,
-    prefix: 'webhook',
-  })
+/** 100 req / 60 s — inbound webhook endpoints */
+export async function rateLimitWebhook(request: NextRequest): Promise<RateLimitResult> {
+  return checkRateLimit(getIdentifier('webhook', request), 100, 60_000)
 }
 
-export async function rateLimitAi(request: NextRequest) {
-  return checkRateLimit(getTenantUserIdentifier(request), {
-    limit: 30, // Max 30 requests/minute
-    windowSec: 60,
-    prefix: 'ai',
-  })
+/** 30 req / 60 s — AI generation endpoints */
+export async function rateLimitAi(request: NextRequest): Promise<RateLimitResult> {
+  return checkRateLimit(getIdentifier('ai', request), 30, 60_000)
 }
 
 /**
- * Returns standard HTTP 429 response with explicit reset and retry headers.
+ * getRateLimiter — kept for backward-compat with callers that used the old
+ * Upstash-backed factory (e.g. services/ai-gateway.ts).
+ *
+ * Returns a thin object with a `.limit(identifier)` method so existing call
+ * sites need zero changes.
+ */
+export function getRateLimiter(prefix: string, limit: number, windowSec: number) {
+  return {
+    limit: (identifier: string): Promise<RateLimitResult> =>
+      Promise.resolve(checkRateLimit(`${prefix}:${identifier}`, limit, windowSec * 1000)),
+  }
+}
+
+/**
+ * Returns a standard HTTP 429 response with retry headers.
  */
 export function rateLimitExceededResponse(result: RateLimitResult): NextResponse {
   return NextResponse.json(
@@ -138,10 +88,10 @@ export function rateLimitExceededResponse(result: RateLimitResult): NextResponse
     {
       status: 429,
       headers: {
-        'X-RateLimit-Limit': String(result.limit),
+        'X-RateLimit-Limit':     String(result.limit),
         'X-RateLimit-Remaining': '0',
-        'X-RateLimit-Reset': String(result.reset),
-        'Retry-After': String(Math.max(1, Math.ceil((result.reset - Date.now()) / 1000))),
+        'X-RateLimit-Reset':     String(result.reset),
+        'Retry-After':           String(Math.max(1, Math.ceil((result.reset - Date.now()) / 1000))),
       },
     }
   )

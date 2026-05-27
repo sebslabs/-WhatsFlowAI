@@ -32,6 +32,8 @@ export const metadata: Metadata = {
 
 import { ThemeReset } from "@/components/ThemeReset";
 import { EndorselyTracker } from "@/components/EndorselyTracker";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/react";
 
 export default function RootLayout({
   children,
@@ -44,6 +46,8 @@ export default function RootLayout({
         <ThemeReset />
         <EndorselyTracker />
         {children}
+        <SpeedInsights />
+        <Analytics />
         <Toaster />
       </body>
     </html>

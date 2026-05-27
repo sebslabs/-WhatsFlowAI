@@ -598,6 +598,14 @@ const worker = new Worker<BaileysJobData>(
   {
     connection,
     concurrency: 5,
+    // OPTIMIZATION: Reduce idle Redis polling.
+    // stalledInterval doubled (30s → 60s) cuts background stall-check commands in half.
+    // lockDuration extended to match worst-case Baileys media download time.
+    // drainDelay reduces BLPOP polling frequency when the queue is idle.
+    stalledInterval: 60_000,
+    lockDuration:    60_000,
+    lockRenewTime:   30_000,
+    drainDelay:      10,
   }
 )
 

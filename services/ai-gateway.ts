@@ -4,8 +4,7 @@
  * multi-model fallback chain, RAG caching, escalation detection.
  */
 import { createClient } from '@supabase/supabase-js';
-import { Ratelimit } from '@upstash/ratelimit';
-import { Redis } from '@upstash/redis';
+import { getRateLimiter } from '@/lib/rate-limit';
 import { config } from '@/lib/config';
 import { logger } from '@/lib/logger';
 import { checkPromptInjection, sanitizeAiResponse } from '@/lib/ai-guards';
@@ -13,19 +12,15 @@ import { retrieveRAGContext } from '@/lib/rag';
 import { initiateHumanHandoff, containsHandoffIntent } from '@/lib/human-handoff';
 import { resolveOpenRouterModel, shouldUseOpenRouterOnly } from '@/lib/openrouter-model';
 
-let _redis: Redis | null = null;
-let _limiter: Ratelimit | null = null;
+/**
+ * getRateLimiter() now uses the in-process LRU cache (lib/memory-cache.ts) —
+ * no Redis credentials needed. The limiter is instantiated once and cached
+ * module-level for zero allocation overhead on subsequent calls.
+ */
+const _limiter = getRateLimiter('ai-gateway', 60, 60); // 60 req/min per tenant:user
 
-function getRedis(): Redis | null {
-  if (_redis) return _redis;
-  const url   = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
-  try {
-    _redis = new Redis({ url, token });
-    _limiter = new Ratelimit({ redis: _redis, limiter: Ratelimit.slidingWindow(60, '1 m'), analytics: true });
-    return _redis;
-  } catch { return null; }
+function getAiLimiter() {
+  return _limiter;
 }
 
 const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey);
@@ -321,10 +316,10 @@ export class AIGateway {
     }
 
     // ── 2. Rate limit ────────────────────────────────────────────────────────
-    const redis = getRedis();
-    if (_limiter) {
+    const limiter = getAiLimiter();
+    if (limiter) {
       try {
-        const { success } = await _limiter.limit(`${tenantId}:${userId}`);
+        const { success } = await limiter.limit(`${tenantId}:${userId}`);
         if (!success) {
           return {
             success: false,

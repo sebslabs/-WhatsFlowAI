@@ -10,15 +10,14 @@ import { NotificationsProvider } from "@/context/NotificationsContext";
 import { WhatsAppNotificationListener } from "@/components/dashboard/WhatsAppNotificationListener";
 import { SidebarProvider, useSidebar } from "@/context/SidebarContext";
 import { ThemeProvider } from "@/components/theme-provider";
+import { IdleTimeoutWarning } from "@/components/dashboard/IdleTimeoutWarning";
 import {
   LayoutDashboard,
   Users,
   Settings,
-  Megaphone,
   Workflow,
   MessageSquare,
 } from "lucide-react";
-import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -27,8 +26,6 @@ const mobileNavItems = [
   { label: "Leads", href: "/dashboard/leads", icon: Users },
   { label: "Chats", href: "/dashboard/conversations", icon: MessageSquare },
   { label: "Automation", href: "/dashboard/automation", icon: Workflow },
-  { label: "Campaigns", href: "/dashboard/campaigns", icon: Megaphone },
-  { label: "Templates", href: "/dashboard/templates", icon: MessageSquare },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -61,7 +58,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       </main>
 
       {/* Mobile bottom nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-[#111827] border-t border-[#E5E7EB] dark:border-[#1F2937] z-40">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-[#111827] border-t border-[#E5E7EB] dark:border-[#1F2937] z-40 safe-area-pb">
         <div className="flex items-center justify-around">
           {mobileNavItems.map((item) => {
             const isActive =
@@ -73,17 +70,23 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 py-2 px-2 flex-1",
+                  "flex flex-col items-center gap-0.5 py-3 px-1 flex-1 min-w-0",
                   isActive ? "text-[#16A34A]" : "text-[#6B7B6B]"
                 )}
               >
-                <item.icon className="w-5 h-5" />
-                <span className="text-[10px] font-medium">{item.label}</span>
+                <item.icon className="w-5 h-5 shrink-0" />
+                <span className="text-[9px] font-semibold truncate w-full text-center">{item.label}</span>
               </Link>
             );
           })}
         </div>
       </nav>
+
+      {/* Auto-logout on idle — renders a warning modal 60s before signing out */}
+      <IdleTimeoutWarning 
+        idleTimeoutMs={30 * 60 * 1000}
+        warningBeforeMs={60 * 1000}
+      />
     </div>
   );
 }

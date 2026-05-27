@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, AlertCircle, Mail, Lock, Check } from "lucide-react";
+import { ArrowRight, AlertCircle, Mail, Lock, Check, Clock } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,10 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const logoutReason = searchParams.get('reason');
+  const wasIdleLogout = logoutReason === 'idle' || logoutReason === 'manual_idle';
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -76,6 +80,20 @@ export default function LoginPage() {
             <h1 className="text-3xl font-black text-[#0f172a] tracking-tight">Welcome back</h1>
             <p className="text-[#64748b] mt-2 font-medium">Enter your details to access your dashboard</p>
           </div>
+
+          {/* Idle session notice */}
+          {wasIdleLogout && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3"
+            >
+              <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-sm text-amber-800 font-medium">
+                You were signed out automatically due to inactivity. Please sign in again to continue.
+              </p>
+            </motion.div>
+          )}
 
           <div className="space-y-6">
             <AnimatePresence mode="wait">

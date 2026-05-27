@@ -1,20 +1,66 @@
 /**
- * Upstash Redis rate limiter middleware for Express.
+ * server/src/middleware/rate-limit.middleware.ts
  *
- * Install: npm i @upstash/redis @upstash/ratelimit
- * Set env: UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
+ * Express rate-limiter — SWITCHED from Upstash Redis to in-process LRU
+ * (the same lib/memory-cache.ts logic, re-implemented here for the Express
+ * server process which cannot import from Next.js `@/lib/*` aliases).
+ *
+ * Before : each request → 1 Redis GET + 1 Redis SET via Upstash REST
+ * After  : each request → O(1) HashMap lookup, zero network I/O
+ *
+ * Redis (Upstash) is now reserved exclusively for:
+ *   - BullMQ active jobs  (ioredis TCP connection)
+ *   - RAG embedding cache (Upstash REST, 24h TTL)
  */
 
 import type { Request, Response, NextFunction } from 'express'
+import { LRUCache } from 'lru-cache'
 
-interface RateLimitOptions {
-  limit: number
-  windowSec: number
-  prefix: string
+// ── In-process rate-limit store ───────────────────────────────────────────────
+
+interface RateLimitEntry {
+  count: number
+  windowStart: number
 }
 
+/**
+ * Single LRU store shared across all Express rate-limit middleware instances.
+ * 10K entries × ~80 bytes each ≈ 800 KB max heap usage.
+ */
+const _store = new LRUCache<string, RateLimitEntry>({
+  max: 10_000,
+  ttl: 60_000,         // 60 s — entries auto-expire after one window
+  ttlAutopurge: false,
+  allowStale: false,
+})
+
+function inProcessLimit(
+  identifier: string,
+  limit: number,
+  windowMs: number,
+): { success: boolean; limit: number; remaining: number; reset: number } {
+  const now   = Date.now()
+  const entry = _store.get(identifier)
+
+  if (!entry || now - entry.windowStart >= windowMs) {
+    _store.set(identifier, { count: 1, windowStart: now })
+    return { success: true, limit, remaining: limit - 1, reset: now + windowMs }
+  }
+
+  const next  = entry.count + 1
+  const reset = entry.windowStart + windowMs
+
+  if (next > limit) {
+    return { success: false, limit, remaining: 0, reset }
+  }
+
+  _store.set(identifier, { count: next, windowStart: entry.windowStart })
+  return { success: true, limit, remaining: limit - next, reset }
+}
+
+// ── Identifier resolver ───────────────────────────────────────────────────────
+
 function getIdentifier(req: Request): string {
-  // Authenticated users are identified by their user ID (more precise than IP)
   if (req.user?.id) return `user:${req.user.id}`
   const ip =
     (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
@@ -23,113 +69,60 @@ function getIdentifier(req: Request): string {
   return `ip:${ip}`
 }
 
-// SECURITY FIX (HIGH #6): Redis client singleton — instantiate once per process,
-// not on every request. Creating new Redis() per request exhausted connection
-// pools under moderate load and caused cascading failures.
-let _redisInstance: import('@upstash/redis').Redis | null = null
-let _redisInitAttempted = false
+// ── Middleware factory ────────────────────────────────────────────────────────
 
-async function getRedisClient(): Promise<import('@upstash/redis').Redis | null> {
-  if (_redisInitAttempted) return _redisInstance
-
-  _redisInitAttempted = true
-
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    return null
-  }
-
-  try {
-    const { Redis } = await import('@upstash/redis')
-    _redisInstance = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    })
-    return _redisInstance
-  } catch (err) {
-    console.error('[rate-limit] Failed to initialise Redis singleton:', err)
-    return null
-  }
+interface RateLimitOptions {
+  limit: number
+  windowSec: number
+  prefix: string
 }
 
-// Cache Ratelimit instances per config key to avoid re-instantiation
-const ratelimitCache = new Map<string, import('@upstash/ratelimit').Ratelimit>()
-
 function createRateLimiter(options: RateLimitOptions) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const redis = await getRedisClient()
+  const windowMs = options.windowSec * 1_000
 
-    if (!redis) {
-      // Redis not configured — skip rate limiting and allow traffic through.
-      // Auth middleware already protects all routes. Rate limiting is a quota system,
-      // not a security gate — failing open is better than blocking all users.
-      console.warn('[rate-limit] Redis unavailable — skipping rate limit check, allowing request')
-      next()
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const key    = `${options.prefix}:${getIdentifier(req)}`
+    const result = inProcessLimit(key, options.limit, windowMs)
+
+    res.setHeader('X-RateLimit-Limit',     result.limit)
+    res.setHeader('X-RateLimit-Remaining', result.remaining)
+    res.setHeader('X-RateLimit-Reset',     result.reset)
+
+    if (!result.success) {
+      const retryAfter = Math.ceil((result.reset - Date.now()) / 1000)
+      res.setHeader('Retry-After', retryAfter)
+      res.status(429).json({ error: 'Too many requests. Please slow down.' })
       return
     }
 
-    try {
-      const { Ratelimit } = await import('@upstash/ratelimit')
-      const cacheKey = `${options.prefix}:${options.limit}:${options.windowSec}`
-
-      let ratelimit = ratelimitCache.get(cacheKey)
-      if (!ratelimit) {
-        ratelimit = new Ratelimit({
-          redis,
-          limiter: Ratelimit.slidingWindow(options.limit, `${options.windowSec} s`),
-          prefix: `whatsflow:${options.prefix}`,
-          analytics: true,
-        })
-        ratelimitCache.set(cacheKey, ratelimit)
-      }
-
-      const identifier = getIdentifier(req)
-      const result = await ratelimit.limit(identifier)
-
-      res.setHeader('X-RateLimit-Limit', result.limit)
-      res.setHeader('X-RateLimit-Remaining', result.remaining)
-      res.setHeader('X-RateLimit-Reset', result.reset)
-
-      if (!result.success) {
-        const retryAfter = Math.ceil((result.reset - Date.now()) / 1000)
-        res.setHeader('Retry-After', retryAfter)
-        res.status(429).json({ error: 'Too many requests. Please slow down.' })
-        return
-      }
-
-      next()
-    } catch (err) {
-      // Redis error during limit check — fail-open to avoid blocking legitimate users.
-      // Auth middleware protects all routes so this is safe. Log for monitoring.
-      console.error('[rate-limit] Redis error during limit check — failing open:', err)
-      next()
-    }
+    next()
   }
 }
 
-// Pre-built limiters for different route groups
+// ── Pre-built middleware for route groups ─────────────────────────────────────
 
-/** 120 requests / 60s per authenticated user */
+/** 120 requests / 60 s per authenticated user */
 export const apiRateLimit = createRateLimiter({
   limit: 120,
   windowSec: 60,
   prefix: 'api',
 })
 
-/** 10 requests / 60s for auth endpoints */
+/** 10 requests / 60 s for auth endpoints */
 export const authRateLimit = createRateLimiter({
   limit: 10,
   windowSec: 60,
   prefix: 'auth',
 })
 
-/** 30 AI calls / 60s per user (controls OpenAI spend) */
+/** 30 AI calls / 60 s per user (controls OpenAI spend) */
 export const aiRateLimit = createRateLimiter({
   limit: 30,
   windowSec: 60,
   prefix: 'ai',
 })
 
-/** 300 webhook events / 60s per IP */
+/** 300 webhook events / 60 s per IP */
 export const webhookRateLimit = createRateLimiter({
   limit: 300,
   windowSec: 60,

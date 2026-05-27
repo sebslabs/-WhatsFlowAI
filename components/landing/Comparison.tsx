@@ -163,10 +163,10 @@ export function Comparison() {
             center 
           />
           <div className="bg-[#F9FAFB] dark:bg-[#0B0F1A] rounded-[32px] border border-[#E5E7EB] dark:border-[#1F2937] p-6 md:p-8 shadow-sm">
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-10 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-8 items-start">
               
               {/* Left Side: Controls */}
-              <div className="space-y-8">
+              <div className="order-2 lg:order-1 space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF] ml-1">Country</label>
@@ -253,7 +253,7 @@ export function Comparison() {
               </div>
 
               {/* Right Side: Result Card */}
-              <div className="bg-[#22C55E] rounded-3xl p-8 text-white relative overflow-hidden shadow-xl shadow-green-500/20">
+              <div className="order-1 lg:order-2 bg-[#22C55E] rounded-3xl p-8 text-white relative overflow-hidden shadow-xl shadow-green-500/20">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 blur-3xl rounded-full -mr-16 -mt-16" />
                 <div className="relative space-y-6">
                   <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">

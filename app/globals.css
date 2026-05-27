@@ -108,6 +108,10 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  .safe-area-pb {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
 
 /* WhatsApp chat bubble styles */

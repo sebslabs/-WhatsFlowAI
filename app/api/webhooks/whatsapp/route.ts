@@ -2,10 +2,9 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
-// MEDIUM FIX (#9): Import shared HMAC verifier — same function used in tests.
-// Eliminates duplicate logic that could silently diverge between test and production.
 import { verifyWebhookHmac } from '@/lib/utils/webhook-hmac';
 import { timingSafeEqual } from 'crypto';
+import { isDuplicate } from '@/lib/memory-cache';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -29,7 +28,15 @@ function getQueue() {
       enableReadyCheck: false,
       tls: redisUrl.startsWith('rediss://') ? {} : undefined,
     });
-    webhookQueue = new Queue('whatsapp-messages', { connection });
+    webhookQueue = new Queue('whatsapp-messages', {
+      connection,
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: { count: 50,  age: 3_600  },
+        removeOnFail:     { count: 20,  age: 86_400 },
+      },
+    });
   }
   return webhookQueue;
 }
@@ -130,6 +137,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
     }
 
+    // ── Deduplication (in-process LRU, zero Redis cost) ────────────────────
+    // Extract messageId early so we can dedup before any expensive DB work.
+    // isDuplicate() marks the ID as seen on first call (set-on-miss semantics).
+    // Meta retries the same messageId within 20 s — this catches all of them.
+    const earlyMsgId = isBaileysPayload
+      ? payload.messageId
+      : payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.id
+
+    if (earlyMsgId && earlyMsgId !== 'unknown' && isDuplicate(earlyMsgId)) {
+      return NextResponse.json({ received: true }, { status: 200 });
+    }
+
     // --- Queue ---
     let messageId = 'unknown';
     let from = 'unknown';
@@ -163,6 +182,8 @@ export async function POST(request: Request) {
       jobId: messageId !== 'unknown' ? messageId : undefined,
       attempts: 3,
       backoff: { type: 'exponential', delay: 2000 },
+      removeOnComplete: { count: 50,  age: 3_600  },
+      removeOnFail:     { count: 20,  age: 86_400 },
     });
 
     return NextResponse.json({ received: true }, { status: 200 });

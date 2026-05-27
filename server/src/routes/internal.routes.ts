@@ -36,6 +36,8 @@ router.post('/baileys/enqueue', requireInternalKey, async (req: Request, res: Re
       rawMessage
     }, {
       jobId: `baileys-${messageId}`, // Natural deduplication
+      removeOnComplete: { count: 50,  age: 3_600  },
+      removeOnFail:     { count: 20,  age: 86_400 },
     })
 
     res.status(202).json({ success: true, message: 'Message enqueued successfully' })

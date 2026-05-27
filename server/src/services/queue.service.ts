@@ -57,13 +57,16 @@ export function getMessageQueue(): Queue<WebhookJobData> {
   const opts: QueueOptions = {
     connection,
     defaultJobOptions: {
-      attempts: 5,
+      attempts: 3,
       backoff: {
         type: 'exponential',
-        delay: 2000, // Start at 2s, double each retry: 2s, 4s, 8s, 16s, 32s
+        delay: 2000, // Start at 2s, double each retry: 2s, 4s, 8s
       },
-      removeOnComplete: { count: 1000 },
-      removeOnFail: { count: 500 },
+      // OPTIMIZATION: Drastically reduced from count:1000 / count:500.
+      // Keeping thousands of completed jobs in Redis is the #1 cause of
+      // excess key storage and SCAN command overhead.
+      removeOnComplete: { count: 50,  age: 3_600  },  // Keep last 50 or 1 hour
+      removeOnFail:     { count: 20,  age: 86_400 },  // Keep last 20 or 24 hours
     },
   }
 

@@ -126,17 +126,17 @@ export function Footer() {
       <div className="bg-[#16A34A]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Final Bottom Bar */}
-          <div className="py-10 flex flex-col md:flex-row items-center justify-between gap-6 text-white">
-            <p className="text-[12px] opacity-80 font-medium tracking-wide">
+          <div className="py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-white">
+            <p className="text-[12px] opacity-80 font-medium tracking-wide text-center sm:text-left">
               © {new Date().getFullYear()} WhatsFlow AI · SEBS (Private) Limited.
             </p>
             
-            <div className="flex items-center gap-8">
+            <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8">
               <div className="flex items-center gap-2 text-white/80 text-[12px] font-bold uppercase tracking-widest">
                 <Globe className="w-3.5 h-3.5" />
                 <span>English (US)</span>
               </div>
-              <div className="flex items-center gap-6 font-bold uppercase tracking-widest text-[12px]">
+              <div className="flex items-center gap-4 sm:gap-6 font-bold uppercase tracking-widest text-[12px]">
                 <Link href="/privacy" className="text-white/80 hover:text-white transition-colors">PRIVACY</Link>
                 <Link href="/terms" className="text-white/80 hover:text-white transition-colors">TERMS</Link>
                 <Link href="/refund" className="text-white/80 hover:text-white transition-colors">REFUND</Link>

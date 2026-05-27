@@ -531,6 +531,8 @@ async function dispatchIncomingMessageToQueue(
       rawMessage,
     }, {
       jobId: `baileys-${messageId}`,
+      removeOnComplete: { count: 50,  age: 3_600  },
+      removeOnFail:     { count: 20,  age: 86_400 },
     });
     console.log('[Baileys-QR] Message successfully dispatched to local BullMQ queue', { messageId, phone });
   } catch (err: any) {

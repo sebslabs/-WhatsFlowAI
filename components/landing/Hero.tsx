@@ -49,7 +49,7 @@ export function Hero() {
   }, [sequenceKey]);
 
   return (
-    <section className="relative min-h-[90vh] lg:min-h-screen flex items-center overflow-hidden bg-[#f0f9f0] pt-20 lg:pt-0">
+    <section className="relative min-h-[90vh] lg:min-h-screen flex items-center overflow-hidden bg-[#f0f9f0] pt-20 lg:pt-0" style={{ overflowX: 'hidden' }}>
       {/* Refined Background Elements */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {/* Main large green glow */}
@@ -217,7 +217,7 @@ export function Hero() {
               <motion.div
                 animate={{ y: [0, -10, 0] }}
                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                className="absolute -top-6 -right-12 bg-white px-3 py-1.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl flex items-center gap-2 sm:gap-3 border border-gray-50"
+                className="absolute -top-6 -right-12 bg-white px-3 py-1.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl hidden sm:flex items-center gap-2 sm:gap-3 border border-gray-50"
               >
                 <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-green-50 flex items-center justify-center text-green-500 shrink-0">
                   <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -231,7 +231,7 @@ export function Hero() {
               <motion.div
                 animate={{ y: [0, 10, 0] }}
                 transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-                className="absolute top-1/2 -left-16 bg-white px-3 py-1.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl flex items-center gap-2 sm:gap-3 border border-gray-50"
+                className="absolute top-1/2 -left-16 bg-white px-3 py-1.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl hidden sm:flex items-center gap-2 sm:gap-3 border border-gray-50"
               >
                 <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0">
                   <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -245,7 +245,7 @@ export function Hero() {
               <motion.div
                 animate={{ x: [0, 8, 0] }}
                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute bottom-12 -right-16 bg-white px-3 py-1.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl flex items-center gap-2 sm:gap-3 border border-gray-50"
+                className="absolute bottom-12 -right-16 bg-white px-3 py-1.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl hidden sm:flex items-center gap-2 sm:gap-3 border border-gray-50"
               >
                 <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-600 shrink-0">
                   <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -259,7 +259,7 @@ export function Hero() {
               <motion.div
                 animate={{ y: [0, -8, 0] }}
                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-                className="absolute -bottom-6 left-0 bg-white px-3 py-1.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl flex items-center gap-2 sm:gap-3 border border-gray-100"
+                className="absolute -bottom-6 left-0 bg-white px-3 py-1.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl hidden sm:flex items-center gap-2 sm:gap-3 border border-gray-100"
               >
                 <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
                   <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4" />

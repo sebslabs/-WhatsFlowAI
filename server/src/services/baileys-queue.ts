@@ -40,8 +40,10 @@ export function getBaileysQueue(): Queue<BaileysJobData> {
         type: 'exponential',
         delay: 2000, // Starts at 2 seconds, backoff up to 8s
       },
-      removeOnComplete: { count: 500 },
-      removeOnFail: { count: 500 },
+      // OPTIMIZATION: Reduced from count:500 each.
+      // Large job histories are the primary source of Redis key bloat.
+      removeOnComplete: { count: 50,  age: 3_600  },
+      removeOnFail:     { count: 20,  age: 86_400 },
     },
   })
   return _queue

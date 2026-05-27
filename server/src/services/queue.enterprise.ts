@@ -58,13 +58,15 @@ export function getRedisConnection(): Redis {
 // ── Default Job Options ───────────────────────────────────────────────────────
 
 const DEFAULT_JOB_OPTIONS = {
-  attempts: 5,
+  attempts: 3,
   backoff: {
     type: 'exponential' as const,
-    delay: 2_000,  // 2s → 4s → 8s → 16s → 32s
+    delay: 2_000,  // 2s → 4s → 8s
   },
-  removeOnComplete: { count: 500, age: 7 * 24 * 3600 },  // Keep 500 or 7 days
-  removeOnFail:     { count: 0  },                         // Keep ALL failures for DLQ inspection
+  // OPTIMIZATION: Reduced from count:500/age:7d and count:0 (keep all failures).
+  // Large job histories cause Redis SCAN storms and bloat key counts significantly.
+  removeOnComplete: { count: 50,  age: 3_600  },  // Keep last 50 or 1 hour
+  removeOnFail:     { count: 20,  age: 86_400 },  // Keep last 20 failures or 24 hours
 }
 
 // ── Queue Factories ───────────────────────────────────────────────────────────
@@ -100,7 +102,14 @@ export function createWorker<T>(
       max:      parseInt(process.env.WORKER_RATE_LIMIT ?? '50', 10),
       duration: 1_000,
     },
-    stalledInterval: 30_000,   // Recover stalled jobs every 30s
+    // OPTIMIZATION: Increase stalled-job check interval from 30s → 60s.
+    // Each stalledInterval tick costs Redis commands. Doubling the interval
+    // halves the background polling overhead with minimal real-world impact
+    // (stalled jobs are typically re-queued within 60s instead of 30s).
+    stalledInterval: 60_000,   // Check for stalled jobs every 60s (was 30s)
+    lockDuration:    60_000,   // Job lock held for 60s before considered stalled
+    lockRenewTime:   30_000,   // Renew lock halfway through lockDuration
+    drainDelay:      10,       // ms to wait between polls when queue is empty
     maxStalledCount: 2,        // After 2 stalls, treat as failure
     ...opts,
   })
@@ -236,6 +245,8 @@ export async function enqueueInbound(data: import('./queue.service.js').WebhookJ
   const q = getQueue(QUEUE_NAMES.INBOUND)
   const job = await q.add('process-message', data, {
     jobId: data.messageId,  // Deduplication via Meta message ID
+    removeOnComplete: { count: 50,  age: 3_600  },
+    removeOnFail:     { count: 20,  age: 86_400 },
   })
   return job.id!
 }
@@ -257,6 +268,8 @@ export async function enqueueOutbound(data: OutboundMessageJob): Promise<string>
   const q = getQueue(QUEUE_NAMES.OUTBOUND)
   const job = await q.add('send-message', data, {
     jobId: data.idempotencyKey,  // Deduplicate outbound sends
+    removeOnComplete: { count: 50,  age: 3_600  },
+    removeOnFail:     { count: 20,  age: 86_400 },
   })
   return job.id!
 }
@@ -273,7 +286,9 @@ export async function replayDLQJob(dlqJobId: string): Promise<void> {
 
   await targetQueue.add('replayed-job', entry.jobData, {
     jobId: `replay-${dlqJobId}-${Date.now()}`,
-    attempts: 5,
+    attempts: 3,
+    removeOnComplete: { count: 50,  age: 3_600  },
+    removeOnFail:     { count: 20,  age: 86_400 },
   })
 
   await job.remove()
