@@ -9,8 +9,8 @@ import { logger } from '@/lib/logger';
  */
 export async function POST(req: NextRequest) {
   try {
-    const internalKey = req.headers.get('x-internal-key');
-    const systemInternalKey = process.env.INTERNAL_API_KEY;
+    const internalKey = req.headers.get('x-internal-secret');
+    const systemInternalKey = process.env.WEBHOOK_INTERNAL_SECRET;
 
     if (!systemInternalKey || internalKey !== systemInternalKey) {
       logger.warn('[Internal Baileys Send] Blocked unauthorized or missing internal key request.');
