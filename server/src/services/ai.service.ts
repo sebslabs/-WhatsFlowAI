@@ -90,7 +90,7 @@ export class AIService {
     const res = await callInternalAI({
       message: prompt,
       systemPrompt: context,
-      model: 'google/gemini-flash-1.5',
+      model: 'google/gemini-2.0-flash-001',
       tenantId
     });
     return res.text;
@@ -138,7 +138,7 @@ export class AIService {
   static async getOpenRouterResponse(
     prompt: string,
     context: string = '',
-    model: string = 'google/gemini-flash-1.5',
+    model: string = 'google/gemini-2.0-flash-001',
     tenantId = '00000000-0000-0000-0000-000000000000'
   ) {
     const res = await callInternalAI({

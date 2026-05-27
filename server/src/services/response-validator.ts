@@ -99,7 +99,7 @@ Output strictly either 'safe' or 'unsafe'. Do not output any other text.`;
 
     try {
       const check = await OpenRouterClient.generateResponse({
-        model: 'google/gemini-flash-1.5',
+        model: 'google/gemini-2.0-flash-001',
         messages: [{ role: 'user', content: prompt }],
         maxTokens: 10,
         temperature: 0.0,

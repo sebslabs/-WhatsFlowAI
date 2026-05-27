@@ -75,7 +75,7 @@ Respond STRICTLY with valid JSON. Do not output markdown code blocks (e.g. \`\`\
 
   try {
     const response = await OpenRouterClient.generateResponse({
-      model: 'google/gemini-flash-1.5',
+      model: 'google/gemini-2.0-flash-001',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Markdown content:\n${contentTruncated}` },

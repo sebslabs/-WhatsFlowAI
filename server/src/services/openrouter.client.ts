@@ -12,7 +12,7 @@ dotenv.config();
 // ── Model Pricing Estimates per 1,000,000 Tokens (USD) ────────────────────────
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'meta-llama/llama-guard-3-8b': { input: 0.20, output: 0.20 },
-  'google/gemini-flash-1.5': { input: 0.075, output: 0.30 },
+  'google/gemini-2.0-flash-001': { input: 0.10, output: 0.40 },
   'mistralai/mistral-small': { input: 0.20, output: 0.60 },
   'openai/gpt-4o-mini': { input: 0.15, output: 0.60 },
   // Fallback defaults
@@ -28,7 +28,7 @@ function calculateCost(model: string, usage: TokenUsage): number {
 
 // ── Fallback Chain Configuration ──────────────────────────────────────────────
 const FALLBACK_CHAIN = [
-  'google/gemini-flash-1.5',
+  'google/gemini-2.0-flash-001',
   'openai/gpt-4o-mini',
   'mistralai/mistral-small',
 ];
