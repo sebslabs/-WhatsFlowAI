@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
       model: agent.metadata?.full_model || agent.model || 'mistral-large-latest',
       kbSources: agent.metadata?.kbSources || [],
       pipeline: agent.metadata?.pipeline || 'Default Pipeline',
-      phoneNumber: agent.metadata?.phone_number || 'all'
+      phoneNumber: agent.metadata?.phone_number || 'all',
+      allowedTemplates: agent.metadata?.allowedTemplates || [],
+      allowedCatalogItems: agent.metadata?.allowedCatalogItems || []
     }))
 
     return NextResponse.json(mapped)
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { name, role, tone, instructions, model, kbSources, pipeline, temperature, phoneNumber } = body
+    const { name, role, tone, instructions, model, kbSources, pipeline, temperature, phoneNumber, allowedTemplates, allowedCatalogItems } = body
 
     // Multi-tier enum safety alignment: Transposes high-fidelity model strings into restricted Enum types
     const lowercaseModel = String(model || 'mistral').toLowerCase()
@@ -81,7 +83,9 @@ export async function POST(request: NextRequest) {
         full_model: model || 'mistral-large-latest',
         kbSources: kbSources || [],
         pipeline: pipeline || 'Default Pipeline',
-        phone_number: phoneNumber || 'all'
+        phone_number: phoneNumber || 'all',
+        allowedTemplates: allowedTemplates || [],
+        allowedCatalogItems: allowedCatalogItems || []
       },
       updated_at: new Date().toISOString()
     }
@@ -110,7 +114,9 @@ export async function POST(request: NextRequest) {
       model: data.metadata?.full_model || data.model || 'mistral-large-latest',
       kbSources: data.metadata?.kbSources || [],
       pipeline: data.metadata?.pipeline || 'Default Pipeline',
-      phoneNumber: data.metadata?.phone_number || 'all'
+      phoneNumber: data.metadata?.phone_number || 'all',
+      allowedTemplates: data.metadata?.allowedTemplates || [],
+      allowedCatalogItems: data.metadata?.allowedCatalogItems || []
     }, { status: 201 })
 
   } catch (err: any) {

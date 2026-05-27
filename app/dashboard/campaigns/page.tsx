@@ -69,7 +69,13 @@ const BLANK_FORM: CampaignForm = {
   scheduleType: "now", scheduledDate: "", scheduledTime: "",
 };
 
-function genId() { return Math.random().toString(36).slice(2, 9); }
+function genId() { 
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 function pct(n: number, t: number) { return t === 0 ? "—" : Math.round((n / t) * 100) + "%"; }
 function fmtDate(iso?: string) {
   if (!iso) return "";

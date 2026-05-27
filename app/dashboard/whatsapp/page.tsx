@@ -49,6 +49,9 @@ export default function WhatsAppIntegrationPage() {
       
       const qrRes = await apiFetch('/api/whatsapp/qr');
       setQrSessions(qrRes || []);
+      
+      // Notify other components (like TopBar) that the connection state has changed
+      window.dispatchEvent(new Event('whatsapp-updated'));
     } catch (error) {
       console.error("Error loading WhatsApp config", error);
     } finally {

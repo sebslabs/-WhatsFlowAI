@@ -92,9 +92,18 @@ export function TopBar() {
     const handleProfileUpdate = () => {
       fetchSubData();
     };
+    
+    // Synchronize WhatsApp connection state from the WhatsApp dashboard page
+    const handleWaUpdate = () => {
+      fetchWaConfig();
+    };
+
     window.addEventListener('profile-updated', handleProfileUpdate);
+    window.addEventListener('whatsapp-updated', handleWaUpdate);
+    
     return () => {
       window.removeEventListener('profile-updated', handleProfileUpdate);
+      window.removeEventListener('whatsapp-updated', handleWaUpdate);
     };
   }, []);
 
@@ -546,7 +555,7 @@ export function TopBar() {
                 title="View Billing Settings"
               >
                 <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 dark:text-gray-400">
-                  <span>AI Usage</span>
+                  <span>Leads Count</span>
                   <span className={cn(
                     (subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500) >= 0.8 ? "text-amber-500 font-extrabold" : "",
                     (subData.ai_conversation_used || 0) >= (subData.ai_conversation_limit || 1500) ? "text-red-500 font-extrabold" : ""

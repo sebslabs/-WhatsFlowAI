@@ -20,7 +20,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    const { name, role, tone, instructions, model, kbSources, pipeline, temperature, phoneNumber } = body
+    const { name, role, tone, instructions, model, kbSources, pipeline, temperature, phoneNumber, allowedTemplates, allowedCatalogItems } = body
 
     // Multi-tier enum safety alignment: Transposes high-fidelity model strings into restricted Enum types
     let dbProvider: string | undefined = undefined
@@ -64,7 +64,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       full_model: model || existingAgent?.metadata?.full_model || 'mistral-large-latest',
       kbSources: kbSources !== undefined ? kbSources : (existingAgent?.metadata?.kbSources || []),
       pipeline: pipeline !== undefined ? pipeline : (existingAgent?.metadata?.pipeline || 'Default Pipeline'),
-      phone_number: phoneNumber !== undefined ? phoneNumber : (existingAgent?.metadata?.phone_number || 'all')
+      phone_number: phoneNumber !== undefined ? phoneNumber : (existingAgent?.metadata?.phone_number || 'all'),
+      allowedTemplates: allowedTemplates !== undefined ? allowedTemplates : (existingAgent?.metadata?.allowedTemplates || []),
+      allowedCatalogItems: allowedCatalogItems !== undefined ? allowedCatalogItems : (existingAgent?.metadata?.allowedCatalogItems || [])
     }
 
     updatePayload.metadata = mergedMetadata
@@ -100,7 +102,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       model: data.metadata?.full_model || data.model || 'mistral-large-latest',
       kbSources: data.metadata?.kbSources || [],
       pipeline: data.metadata?.pipeline || 'Default Pipeline',
-      phoneNumber: data.metadata?.phone_number || 'all'
+      phoneNumber: data.metadata?.phone_number || 'all',
+      allowedTemplates: data.metadata?.allowedTemplates || [],
+      allowedCatalogItems: data.metadata?.allowedCatalogItems || []
     })
 
   } catch (err: any) {

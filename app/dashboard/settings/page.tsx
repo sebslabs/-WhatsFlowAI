@@ -1032,7 +1032,7 @@ function SettingsPageContent() {
                 {sub && (
                   <div className="mt-5 max-w-md space-y-2">
                     <div className="flex justify-between items-center text-xs font-bold text-gray-500 dark:text-gray-400">
-                      <span>Monthly AI Conversation Usage</span>
+                      <span>Monthly Leads Count</span>
                       <span className={cn(
                         "font-extrabold",
                         isLimitReached ? "text-rose-500" : isUsageWarning ? "text-amber-500" : "text-green-500"

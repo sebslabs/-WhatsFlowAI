@@ -6,7 +6,7 @@ import {
   Plus, Bot, Edit3, Trash2, Send, Wand2, RefreshCw, Pause, Play,
   Loader2, AlertCircle, Brain, BookOpen, X, PlusCircle, Cpu,
   ChevronDown, ChevronUp, Globe, FileText, MessageSquare, Building2,
-  Database,
+  Database, Wrench, MessageCircle, ShoppingBag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,13 @@ import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type KbSourceType = "business_context" | "faq" | "website_url" | "plain_text" | "existing_asset";
+
+interface AllowedAsset {
+  id: string;
+  assetId: string;
+  assetName: string;
+  usageInstructions: string;
+}
 
 interface FaqEntry {
   id: string;
@@ -62,6 +69,8 @@ interface Agent {
   created_at?: string;
   pipeline?: string;
   phoneNumber?: string;
+  allowedTemplates?: AllowedAsset[];
+  allowedCatalogItems?: AllowedAsset[];
 }
 
 interface ChatMessage {
@@ -176,6 +185,15 @@ export default function AIAgentsPage() {
   const [kbSources, setKbSources] = useState<KbSource[]>([]);
   const [addKbType, setAddKbType] = useState("");
 
+  // Tools & Assets state
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
+  const [availableCatalog, setAvailableCatalog] = useState<any[]>([]);
+  const [allowedTemplates, setAllowedTemplates] = useState<AllowedAsset[]>([]);
+  const [allowedCatalogItems, setAllowedCatalogItems] = useState<AllowedAsset[]>([]);
+  const [addTemplateId, setAddTemplateId] = useState("");
+  const [addCatalogId, setAddCatalogId] = useState("");
+
   // Sandbox state
   const [sandboxAgentId, setSandboxAgentId] = useState<string>("");
   const [previewInput, setPreviewInput] = useState("");
@@ -247,11 +265,24 @@ export default function AIAgentsPage() {
     }
   }
 
+  async function loadAvailableAssets() {
+    try {
+      const tpl = await apiFetch("/api/whatsapp/templates");
+      if (tpl && Array.isArray(tpl)) setAvailableTemplates(tpl);
+    } catch (err) { console.error("Failed to load templates", err); }
+
+    try {
+      const cat = await apiFetch("/api/catalog");
+      if (cat && Array.isArray(cat)) setAvailableCatalog(cat);
+    } catch (err) { console.error("Failed to load catalog", err); }
+  }
+
   const [globalKbItems, setGlobalKbItems] = useState<any[]>([]);
 
   useEffect(() => { 
     loadAgents(); 
     loadPhoneNumbers();
+    loadAvailableAssets();
   }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatHistory, isTyping]);
 
@@ -444,6 +475,50 @@ export default function AIAgentsPage() {
     ));
   }
 
+  // ── Asset helpers ─────────────────────────────────────────────────────────
+
+  function addTemplate() {
+    if (!addTemplateId) return;
+    const tpl = availableTemplates.find(t => t.id === addTemplateId);
+    if (!tpl) return;
+    setAllowedTemplates(prev => [...prev, {
+      id: crypto.randomUUID(),
+      assetId: tpl.id,
+      assetName: tpl.name || "Template",
+      usageInstructions: ""
+    }]);
+    setAddTemplateId("");
+  }
+
+  function removeTemplate(id: string) {
+    setAllowedTemplates(prev => prev.filter(t => t.id !== id));
+  }
+
+  function updateTemplateInstruction(id: string, text: string) {
+    setAllowedTemplates(prev => prev.map(t => t.id === id ? { ...t, usageInstructions: text } : t));
+  }
+
+  function addCatalogItem() {
+    if (!addCatalogId) return;
+    const cat = availableCatalog.find(c => c.id === addCatalogId);
+    if (!cat) return;
+    setAllowedCatalogItems(prev => [...prev, {
+      id: crypto.randomUUID(),
+      assetId: cat.id,
+      assetName: cat.name || "Product",
+      usageInstructions: ""
+    }]);
+    setAddCatalogId("");
+  }
+
+  function removeCatalogItem(id: string) {
+    setAllowedCatalogItems(prev => prev.filter(c => c.id !== id));
+  }
+
+  function updateCatalogInstruction(id: string, text: string) {
+    setAllowedCatalogItems(prev => prev.map(c => c.id === id ? { ...c, usageInstructions: text } : c));
+  }
+
   // ── Form ──────────────────────────────────────────────────────────────────
 
   function resetForm() {
@@ -451,6 +526,8 @@ export default function AIAgentsPage() {
     setName(""); setRole(""); setInstructions(""); setTone("Professional");
     setModel("mistral-large-latest"); setPipeline("Default Pipeline"); setKbSources([]); setKbOpen(false); setAddKbType("");
     setPhoneNumber("all");
+    setAllowedTemplates([]); setAllowedCatalogItems([]);
+    setToolsOpen(false); setAddTemplateId(""); setAddCatalogId("");
   }
 
   async function handleSaveAgent() {
@@ -459,16 +536,16 @@ export default function AIAgentsPage() {
       return;
     }
     setSaving(true);
-    const payload = { name, role, instructions, tone, model, kbSources, phoneNumber };
+    const payload = { name, role, instructions, tone, model, kbSources, phoneNumber, allowedTemplates, allowedCatalogItems };
     try {
       if (editingAgent) {
         const updated = await apiFetch(`/api/ai-agents/${editingAgent.id}`, {
           method: "PUT", body: JSON.stringify(payload),
         });
         const localExtras = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("ai_agents_extras") || "{}") : {};
-        localExtras[editingAgent.id] = { model, pipeline, kbSources };
+        localExtras[editingAgent.id] = { model, pipeline, kbSources, allowedTemplates, allowedCatalogItems };
         if (typeof window !== "undefined") localStorage.setItem("ai_agents_extras", JSON.stringify(localExtras));
-        const fullUpdated = { ...updated, model, pipeline, kbSources, phoneNumber };
+        const fullUpdated = { ...updated, model, pipeline, kbSources, phoneNumber, allowedTemplates, allowedCatalogItems };
 
         setAgents(prev => prev.map(a => a.id === editingAgent.id ? fullUpdated : a));
         if (sandboxAgentId === editingAgent.id)
@@ -479,9 +556,9 @@ export default function AIAgentsPage() {
           method: "POST", body: JSON.stringify(payload),
         });
         const localExtras = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("ai_agents_extras") || "{}") : {};
-        localExtras[created.id] = { model, pipeline, kbSources };
+        localExtras[created.id] = { model, pipeline, kbSources, allowedTemplates, allowedCatalogItems };
         if (typeof window !== "undefined") localStorage.setItem("ai_agents_extras", JSON.stringify(localExtras));
-        const fullCreated = { ...created, model, pipeline, kbSources, phoneNumber };
+        const fullCreated = { ...created, model, pipeline, kbSources, phoneNumber, allowedTemplates, allowedCatalogItems };
 
         setAgents(prev => [fullCreated, ...prev]);
         if (!sandboxAgentId) {
@@ -507,6 +584,9 @@ export default function AIAgentsPage() {
     setKbSources(agent.kbSources ?? []);
     setKbOpen((agent.kbSources ?? []).length > 0);
     setPhoneNumber(agent.phoneNumber ?? "all");
+    setAllowedTemplates(agent.allowedTemplates ?? []);
+    setAllowedCatalogItems(agent.allowedCatalogItems ?? []);
+    setToolsOpen((agent.allowedTemplates?.length || agent.allowedCatalogItems?.length) ? true : false);
     setIsCreating(true);
   }
 
@@ -1151,7 +1231,148 @@ export default function AIAgentsPage() {
                   </AnimatePresence>
                 </div>
 
-                {/* Save */}
+                {/* ── Tools & Assets (collapsible) ── */}
+                <div className="border border-[#E5E7EB] dark:border-[#1F2937] rounded-xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setToolsOpen(o => !o)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-[#F9FAFB] dark:bg-[#0B0F1A] hover:bg-[#F3F4F6] dark:hover:bg-[#111827] transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Wrench className="w-4 h-4 text-[#22C55E]" />
+                      <span className="text-sm font-bold text-[#111827] dark:text-[#F9FAFB]">Tools & Assets</span>
+                      {(allowedTemplates.length + allowedCatalogItems.length) > 0 && (
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#22C55E]/10 text-[#22C55E]">
+                          {allowedTemplates.length + allowedCatalogItems.length} active
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-[#6B7280] dark:text-[#9CA3AF]">
+                        {toolsOpen ? "Collapse" : "Configure"}
+                      </span>
+                      {toolsOpen
+                        ? <ChevronUp className="w-4 h-4 text-[#6B7280] dark:text-[#9CA3AF]" />
+                        : <ChevronDown className="w-4 h-4 text-[#6B7280] dark:text-[#9CA3AF]" />
+                      }
+                    </div>
+                  </button>
+
+                  <AnimatePresence initial={false}>
+                    {toolsOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="p-4 space-y-4">
+                          <p className="text-[11px] text-[#6B7280] dark:text-[#9CA3AF]">
+                            Equip the agent with WhatsApp templates and catalog items it can send to users.
+                          </p>
+
+                          {/* WhatsApp Templates */}
+                          <div className="space-y-3">
+                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#111827] dark:text-[#F9FAFB] flex items-center gap-1.5">
+                              <MessageCircle className="w-3.5 h-3.5 text-[#22C55E]" /> WhatsApp Templates
+                            </h4>
+                            {allowedTemplates.length === 0 && (
+                              <p className="text-[11px] text-[#9CA3AF] dark:text-[#6B7280]">No templates assigned.</p>
+                            )}
+                            {allowedTemplates.map(tpl => (
+                              <div key={tpl.id} className="bg-[#F9FAFB] dark:bg-[#0B0F1A] border border-[#E5E7EB] dark:border-[#1F2937] rounded-lg p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] font-bold text-[#111827] dark:text-[#F9FAFB]">{tpl.assetName}</span>
+                                  <button type="button" onClick={() => removeTemplate(tpl.id)} className="text-[#9CA3AF] hover:text-red-500 transition-colors">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                <Textarea
+                                  placeholder="When should the AI use this template? (e.g. 'Send this when the user asks for pricing details')"
+                                  value={tpl.usageInstructions}
+                                  onChange={e => updateTemplateInstruction(tpl.id, e.target.value)}
+                                  rows={2}
+                                  className={`${innerFieldClass} resize-none text-xs`}
+                                />
+                              </div>
+                            ))}
+                            <div className="flex gap-2 mt-2">
+                              <Select value={addTemplateId} onValueChange={setAddTemplateId}>
+                                <SelectTrigger className="flex-1 h-9 bg-[#F9FAFB] dark:bg-[#0B0F1A] border-[#E5E7EB] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB] rounded-xl text-xs">
+                                  <SelectValue placeholder="Select a WhatsApp template..." />
+                                </SelectTrigger>
+                                <SelectContent className={selectContentClass}>
+                                  {availableTemplates.map(t => (
+                                    <SelectItem key={t.id} value={t.id} className={selectItemClass}>{t.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button"
+                                onClick={addTemplate}
+                                disabled={!addTemplateId}
+                                className="h-9 px-4 bg-[#22C55E] hover:bg-[#16A34A] text-white font-bold text-xs rounded-xl shrink-0 disabled:opacity-40"
+                              >
+                                <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="h-px bg-[#E5E7EB] dark:bg-[#1F2937] my-4"></div>
+
+                          {/* Catalog Items */}
+                          <div className="space-y-3">
+                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#111827] dark:text-[#F9FAFB] flex items-center gap-1.5">
+                              <ShoppingBag className="w-3.5 h-3.5 text-[#22C55E]" /> Catalog Items
+                            </h4>
+                            {allowedCatalogItems.length === 0 && (
+                              <p className="text-[11px] text-[#9CA3AF] dark:text-[#6B7280]">No catalog items assigned.</p>
+                            )}
+                            {allowedCatalogItems.map(cat => (
+                              <div key={cat.id} className="bg-[#F9FAFB] dark:bg-[#0B0F1A] border border-[#E5E7EB] dark:border-[#1F2937] rounded-lg p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] font-bold text-[#111827] dark:text-[#F9FAFB]">{cat.assetName}</span>
+                                  <button type="button" onClick={() => removeCatalogItem(cat.id)} className="text-[#9CA3AF] hover:text-red-500 transition-colors">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                <Textarea
+                                  placeholder="When should the AI recommend this product? (e.g. 'Offer this if they want a premium package')"
+                                  value={cat.usageInstructions}
+                                  onChange={e => updateCatalogInstruction(cat.id, e.target.value)}
+                                  rows={2}
+                                  className={`${innerFieldClass} resize-none text-xs`}
+                                />
+                              </div>
+                            ))}
+                            <div className="flex gap-2 mt-2">
+                              <Select value={addCatalogId} onValueChange={setAddCatalogId}>
+                                <SelectTrigger className="flex-1 h-9 bg-[#F9FAFB] dark:bg-[#0B0F1A] border-[#E5E7EB] dark:border-[#1F2937] text-[#111827] dark:text-[#F9FAFB] rounded-xl text-xs">
+                                  <SelectValue placeholder="Select a catalog item..." />
+                                </SelectTrigger>
+                                <SelectContent className={selectContentClass}>
+                                  {availableCatalog.map(c => (
+                                    <SelectItem key={c.id} value={c.id} className={selectItemClass}>{c.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button"
+                                onClick={addCatalogItem}
+                                disabled={!addCatalogId}
+                                className="h-9 px-4 bg-[#22C55E] hover:bg-[#16A34A] text-white font-bold text-xs rounded-xl shrink-0 disabled:opacity-40"
+                              >
+                                <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                              </Button>
+                            </div>
+                          </div>
+
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
                 <Button
                   className="w-full bg-[#22C55E] hover:bg-[#16A34A] text-white font-bold h-11 rounded-xl shadow-md active:scale-95 transition-all"
                   onClick={handleSaveAgent}
