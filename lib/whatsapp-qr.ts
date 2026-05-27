@@ -443,6 +443,16 @@ export async function getBaileysSession(tenantId: string, sessionId: string): Pr
       }
     } else if (connection === 'open') {
       const phoneNumber = sock.user?.id?.split(':')[0];
+
+      if (phoneNumber) {
+        // Delete any existing session that holds this phone number (to avoid unique constraint errors)
+        await supabase
+          .from('whatsapp_qr_sessions')
+          .delete()
+          .eq('phone_number', phoneNumber)
+          .neq('id', sessionId);
+      }
+
       await supabase
         .from('whatsapp_qr_sessions')
         .update({

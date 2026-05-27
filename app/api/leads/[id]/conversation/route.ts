@@ -40,7 +40,7 @@ export async function GET(
     // PERFORMANCE FIX: Fetch the most recent messages first, then reverse for chronological UI
     const fullSelect = await supabase
       .from('messages')
-      .select('id, sender_type, content, message_type, media_url, metadata, created_at', { count: 'exact' })
+      .select('id, sender_type, content, message_type, media_url, metadata, created_at', { count: 'estimated' })
       .in('conversation_id', conversationIds)
       .eq('tenant_id', user.tenant_id)
       .order('created_at', { ascending: false })
@@ -54,7 +54,7 @@ export async function GET(
 
       const safeSelect = await supabase
         .from('messages')
-        .select('id, sender_type, content, created_at', { count: 'exact' })
+        .select('id, sender_type, content, created_at', { count: 'estimated' })
         .in('conversation_id', conversationIds)
         .eq('tenant_id', user.tenant_id)
         .order('created_at', { ascending: false })
