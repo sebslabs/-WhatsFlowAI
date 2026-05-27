@@ -116,28 +116,62 @@ export async function POST(request: NextRequest) {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
       const internalKey = process.env.INTERNAL_API_KEY || '';
       const formattedJid = `${phoneNumber.replace(/\D/g, '')}@s.whatsapp.net`;
-      
-      const backendResponse = await fetch(`${apiUrl}/api/internal/baileys/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Internal-Key': internalKey,
-        },
-        body: JSON.stringify({
-          tenantId: user.tenant_id,
-          sessionId: qrSession.id,
-          jid: formattedJid,
-          text: content,
-          messageType,
-          mediaUrl,
-          mimeType,
-          fileName
-        }),
-      });
 
-      if (!backendResponse.ok) {
-        const errorData = await backendResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || `Baileys send gateway fault (HTTP ${backendResponse.status})`);
+      // Retry up to 3 times with exponential backoff to handle transient Baileys socket reconnects
+      const MAX_RETRIES = 3;
+      let backendResponse: Response | null = null;
+      let lastError: string = '';
+
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout per attempt
+
+          backendResponse = await fetch(`${apiUrl}/api/internal/baileys/send`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Internal-Key': internalKey,
+            },
+            body: JSON.stringify({
+              tenantId: user.tenant_id,
+              sessionId: qrSession.id,
+              jid: formattedJid,
+              text: content,
+              messageType,
+              mediaUrl,
+              mimeType,
+              fileName
+            }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeout);
+
+          if (backendResponse.ok) break; // success — exit retry loop
+
+          const errorData = await backendResponse.json().catch(() => ({}));
+          lastError = errorData.error || `Baileys send gateway fault (HTTP ${backendResponse.status})`;
+
+          // Don't retry on auth errors
+          if (backendResponse.status === 401 || backendResponse.status === 400) break;
+
+          // Wait before retry: 500ms, 1500ms
+          if (attempt < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, attempt * 500));
+          }
+        } catch (fetchErr: any) {
+          lastError = fetchErr.name === 'AbortError'
+            ? 'Baileys send request timed out — socket may be reconnecting'
+            : fetchErr.message;
+          if (attempt < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, attempt * 500));
+          }
+        }
+      }
+
+      if (!backendResponse?.ok) {
+        throw new Error(lastError || 'Baileys send failed after retries');
       }
 
       const backendResult = await backendResponse.json();
