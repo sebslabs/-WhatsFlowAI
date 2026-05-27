@@ -42,12 +42,12 @@ jobs:
         run: npm ci
         working-directory: .
 
-      - name: Next.js type check
-        run: npx tsc --noEmit
+      - name: Rebuild native modules for frontend
+        run: npm rebuild @rollup/rollup-linux-x64-gnu
         working-directory: .
 
-      - name: Rebuild Rollup native modules
-        run: npm rebuild @rollup/rollup-linux-x64-gnu || true
+      - name: Next.js type check
+        run: npx tsc --noEmit
         working-directory: .
 
       - name: Unit tests (Vitest)
