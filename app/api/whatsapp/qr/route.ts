@@ -36,6 +36,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { sessionName, phoneNumber } = body;
 
+    if (phoneNumber) {
+      // Clear out any old sessions tied to this phone number to avoid unique constraint database errors
+      await userSupabase
+        .from("whatsapp_qr_sessions")
+        .delete()
+        .eq("phone_number", phoneNumber);
+    }
+
     // Create a new session in DB
     const { data, error } = await userSupabase
       .from("whatsapp_qr_sessions")

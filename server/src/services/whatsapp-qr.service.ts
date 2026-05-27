@@ -347,7 +347,7 @@ export async function getBaileysSession(tenantId: string, sessionId: string): Pr
 
   const sock = makeWASocket({
     version,
-    logger: logger as any,
+    logger: pino({ level: 'silent' }) as any,
     printQRInTerminal: false,
     auth: state,
     browser: Browsers.macOS('Desktop'),
@@ -410,10 +410,10 @@ export async function getBaileysSession(tenantId: string, sessionId: string): Pr
       const phoneNumber = sock.user?.id?.split(':')[0];
 
       if (phoneNumber) {
-        // Delete any existing session that holds this phone number (to avoid unique constraint errors)
+        // Safely free up the unique constraint before claiming it for this new session
         await supabase
           .from('whatsapp_qr_sessions')
-          .delete()
+          .update({ phone_number: null, status: 'disconnected' })
           .eq('phone_number', phoneNumber)
           .neq('id', sessionId);
       }
