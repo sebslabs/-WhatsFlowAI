@@ -11,13 +11,28 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-const connection = new Redis(redisUrl, {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-  tls: redisUrl.startsWith('rediss://') ? {} : undefined,
-});
-const webhookQueue = new Queue('whatsapp-messages', { connection });
+let connection: Redis | undefined;
+let webhookQueue: Queue | undefined;
+
+function getQueue() {
+  if (process.env.SKIP_REDIS === 'true') {
+    return new Proxy({} as Queue, {
+      get(_, prop) {
+        return () => console.warn(`[Redis Skipped] Attempted to access Queue.${String(prop)} during build`);
+      }
+    });
+  }
+  if (!webhookQueue) {
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    connection = new Redis(redisUrl, {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      tls: redisUrl.startsWith('rediss://') ? {} : undefined,
+    });
+    webhookQueue = new Queue('whatsapp-messages', { connection });
+  }
+  return webhookQueue;
+}
 
 function verifyInternalSecret(request: Request): boolean {
   const authHeader = request.headers.get('x-internal-secret');
@@ -135,7 +150,7 @@ export async function POST(request: Request) {
       phoneNumberId = payload.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id || null;
     }
 
-    await webhookQueue.add('inbound-message', {
+    await getQueue().add('inbound-message', {
       messageId,
       from,
       text,
