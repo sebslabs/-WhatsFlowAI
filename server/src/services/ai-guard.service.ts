@@ -4,7 +4,7 @@ import { logger } from '../utils/logger.js';
 import type { ThreatClassification, ThreatCategory } from '../types/ai-security.types.js';
 
 export class AIGuardService {
-  private static classifierModel = 'meta-llama/llama-guard-3-8b';
+  private static classifierModel = 'openai/gpt-4o-mini';
 
   /**
    * Evaluates if an incoming customer message contains jailbreaks, prompt injections, or unsafe instructions.
@@ -39,9 +39,12 @@ export class AIGuardService {
     try {
       const response = await OpenRouterClient.generateResponse({
         model: this.classifierModel,
-        messages: [{ role: 'user', content: prompt }],
-        maxTokens: 50,
-        temperature: 0.0, // Strict deterministic outputs
+        messages: [
+          { role: 'system', content: 'You are a content safety classifier. Respond with only "safe" or "unsafe" followed by a category code on a new line (e.g. S5). Nothing else.' },
+          { role: 'user', content: prompt },
+        ],
+        maxTokens: 20,
+        temperature: 0.0,
         tenantId,
         leadId,
       });
@@ -88,28 +91,18 @@ export class AIGuardService {
         reason: 'Unresolved safety classification output, defaulted to safe',
       };
     } catch (err: any) {
-      logger.error(`[AIGuard] OpenRouter Llama Guard call failed, relying on Layer 1 heuristics`, {
+      logger.warn(`[AIGuard] AI safety classifier call failed — falling back to local heuristics only`, {
         error: err.message,
         tenantId,
       });
 
-      // Fail-closed fallback: If local heuristics detected ANY risk (even below the threshold of 3),
-      // we reject the message in high-security production environments.
-      if (localCheck.score > 0) {
-        return {
-          safe: false,
-          riskScore: 0.6,
-          category: 'role_manipulation',
-          reason: 'Llama Guard offline, local heuristics score is suspicious. Fail-closed enforced.',
-        };
-      }
-
-      // Default safe if local heuristic is clean
+      // Fail-OPEN: never block the AI pipeline due to a guard model failure.
+      // Layer 1 local heuristics already ran above — if they didn't catch it, allow through.
       return {
         safe: true,
         riskScore: 0.0,
         category: 'none',
-        reason: 'Passed heuristic checks (Llama Guard was offline)',
+        reason: 'Safety classifier unavailable — passed Layer 1 heuristic checks',
       };
     }
   }
