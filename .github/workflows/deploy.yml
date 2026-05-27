@@ -83,7 +83,12 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://fallback.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'fallback-anon-key' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://fallback.supabase.co' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'fallback-anon-key' }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY || 'fallback-encryption-key-32-chars!!' }}
           SKIP_REDIS: "true"
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
