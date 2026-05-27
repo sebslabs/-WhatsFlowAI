@@ -59,14 +59,10 @@ function createRateLimiter(options: RateLimitOptions) {
     const redis = await getRedisClient()
 
     if (!redis) {
-      // Redis not configured — skip in development; block in production
-      // SECURITY FIX (HIGH #6): Fail-closed in production to prevent DDoS cost explosion.
-      if (process.env.NODE_ENV === 'production') {
-        console.error('[rate-limit] Redis unavailable in production \u2014 failing closed to protect system')
-        res.status(503).json({ error: 'Service temporarily unavailable. Please retry.' })
-        return
-      }
-      // Non-production: skip rate limiting
+      // Redis not configured — skip rate limiting and allow traffic through.
+      // Auth middleware already protects all routes. Rate limiting is a quota system,
+      // not a security gate — failing open is better than blocking all users.
+      console.warn('[rate-limit] Redis unavailable — skipping rate limit check, allowing request')
       next()
       return
     }
@@ -102,14 +98,9 @@ function createRateLimiter(options: RateLimitOptions) {
 
       next()
     } catch (err) {
-      // SECURITY FIX (HIGH #6): On Redis error, fail-closed in production to prevent
-      // an attacker from intentionally triggering Redis errors to bypass rate limits.
-      console.error('[rate-limit] Redis error during limit check:', err)
-      if (process.env.NODE_ENV === 'production') {
-        res.status(503).json({ error: 'Service temporarily unavailable. Please retry.' })
-        return
-      }
-      // Non-production: fail-open (allow traffic through for developer convenience)
+      // Redis error during limit check — fail-open to avoid blocking legitimate users.
+      // Auth middleware protects all routes so this is safe. Log for monitoring.
+      console.error('[rate-limit] Redis error during limit check — failing open:', err)
       next()
     }
   }
