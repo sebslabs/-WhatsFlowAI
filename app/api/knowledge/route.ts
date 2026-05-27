@@ -285,3 +285,67 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Save execution failed', details: err.message }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  const { user, supabase, error } = await requireAuthApi(request);
+  if (error) return error;
+
+  try {
+    assertPermission(user.role, 'knowledge:delete');
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 403 });
+  }
+
+  const id = request.nextUrl.searchParams.get('id');
+  if (!id) {
+    return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+  }
+
+  try {
+    // Determine if this is part of a larger chunked document
+    const { data: item, error: fetchError } = await supabase
+      .from('knowledge_base')
+      .select('metadata, source_url')
+      .eq('id', id)
+      .eq('tenant_id', user.tenant_id)
+      .single();
+
+    if (fetchError || !item) {
+      return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
+    }
+
+    const documentId = item.metadata?.document_id;
+    let deleteQuery = supabase.from('knowledge_base').delete().eq('tenant_id', user.tenant_id);
+
+    if (documentId) {
+      // Supabase jsonb containment query to delete all chunks belonging to this document
+      deleteQuery = deleteQuery.contains('metadata', { document_id: documentId });
+    } else {
+      deleteQuery = deleteQuery.eq('id', id);
+    }
+
+    const { error: dbError } = await deleteQuery;
+    if (dbError) throw dbError;
+
+    // Optional: Delete file from storage if it was a file upload
+    if (item.source_url && item.source_url.includes('knowledge-base')) {
+      try {
+        const urlObj = new URL(item.source_url);
+        const pathSegments = urlObj.pathname.split('/');
+        const kbIndex = pathSegments.indexOf('knowledge-base');
+        if (kbIndex !== -1 && kbIndex < pathSegments.length - 1) {
+          const filePath = pathSegments.slice(kbIndex + 1).map(decodeURIComponent).join('/');
+          await supabase.storage.from('knowledge-base').remove([filePath]);
+        }
+      } catch (e) {
+        logger.warn('[knowledge] Failed to remove file from storage:', e);
+      }
+    }
+
+    logger.info({ userId: user.id, assetId: id }, '[knowledge] Asset deleted successfully');
+    return NextResponse.json({ success: true, message: 'Asset removed' });
+  } catch (err: any) {
+    logger.error({ userId: user.id }, 'DELETE /api/knowledge failed', err);
+    return NextResponse.json({ error: 'Deletion failed', details: err.message }, { status: 500 });
+  }
+}
