@@ -70,12 +70,14 @@ export function useLeads(): UseLeadsReturn {
   const addLead = useCallback(async (data: LeadFormData): Promise<Lead> => {
     const created = await createLeadApi(data);
     setLeads((prev) => [created, ...prev]);
+    window.dispatchEvent(new Event('leads-updated'));
     return created;
   }, []);
 
   const updateLead = useCallback(async (id: string, data: LeadFormData): Promise<void> => {
     const updated = await updateLeadApi(id, data);
     setLeads((prev) => prev.map((lead) => (lead.id === id ? updated : lead)));
+    window.dispatchEvent(new Event('leads-updated'));
   }, []);
 
   const moveLeadToStage = useCallback(async (id: string, stage: LeadStage): Promise<void> => {
@@ -103,6 +105,7 @@ export function useLeads(): UseLeadsReturn {
           : l
       )
     );
+    window.dispatchEvent(new Event('leads-updated'));
   }, []);
 
   const deleteLead = useCallback(async (id: string): Promise<void> => {
@@ -113,6 +116,7 @@ export function useLeads(): UseLeadsReturn {
       next.delete(id);
       return next;
     });
+    window.dispatchEvent(new Event('leads-updated'));
   }, []);
 
   const bulkDelete = useCallback(async (ids: string[]): Promise<void> => {
@@ -121,6 +125,7 @@ export function useLeads(): UseLeadsReturn {
     const idSet = new Set(ids);
     setLeads((prev) => prev.filter((l) => !idSet.has(l.id)));
     setSelectedIds(new Set());
+    window.dispatchEvent(new Event('leads-updated'));
   }, []);
 
   const importLeads = useCallback(async (leadsData: LeadFormData[]): Promise<number> => {
@@ -134,6 +139,7 @@ export function useLeads(): UseLeadsReturn {
         // Continue other rows; caller can toast partial success
       }
     }
+    window.dispatchEvent(new Event('leads-updated'));
     return ok;
   }, []);
 

@@ -130,9 +130,12 @@ export default function TemplatesPage() {
   const handleDelete = async (id: string) => {
     try {
       await apiFetch(`/api/whatsapp-templates/${id}`, { method: "DELETE" });
-    } catch (err) {}
-    setTemplates(templates.filter(t => t.id !== id));
-    toast("Template successfully deleted", "success");
+      setTemplates(templates.filter(t => t.id !== id));
+      toast("Template successfully deleted", "success");
+    } catch (err: any) {
+      console.error("Delete error:", err);
+      toast(err.message || "Failed to delete template", "error");
+    }
   };
 
   const handleDuplicate = async (template: WhatsAppTemplate) => {
@@ -145,13 +148,18 @@ export default function TemplatesPage() {
       updated_at: new Date().toISOString()
     };
     try {
-      await apiFetch("/api/whatsapp-templates", {
+      const savedDb = await apiFetch("/api/whatsapp-templates", {
         method: "POST",
         body: JSON.stringify(copy)
       });
-    } catch (err) {}
-    setTemplates([copy, ...templates]);
-    toast("Template duplicated", "success");
+      if (savedDb) {
+        setTemplates([savedDb, ...templates]);
+        toast("Template duplicated", "success");
+      }
+    } catch (err: any) {
+      console.error("Duplicate error:", err);
+      toast(err.message || "Failed to duplicate template", "error");
+    }
   };
 
   if (loading) {
@@ -267,18 +275,26 @@ export default function TemplatesPage() {
         }}
         onSave={async (saved) => {
           try {
-            await apiFetch("/api/whatsapp-templates", {
+            const savedDb = await apiFetch("/api/whatsapp-templates", {
               method: "POST",
               body: JSON.stringify(saved)
             });
-          } catch (err) {}
-          const index = templates.findIndex(item => item.id === saved.id);
-          if (index >= 0) {
-            const copy = [...templates];
-            copy[index] = saved;
-            setTemplates(copy);
-          } else {
-            setTemplates([saved, ...templates]);
+            if (savedDb) {
+              setTemplates((prev) => {
+                const index = prev.findIndex(item => item.id === saved.id || item.id === savedDb.id);
+                if (index >= 0) {
+                  const copy = [...prev];
+                  copy[index] = savedDb;
+                  return copy;
+                } else {
+                  return [savedDb, ...prev];
+                }
+              });
+              toast(editingTemplate ? "Template changes synchronized ✓" : "Template submitted for approval 🚀", "success");
+            }
+          } catch (err: any) {
+            console.error("Save error:", err);
+            toast(err.message || "Failed to save template.", "error");
           }
           setSheetOpen(false);
           setEditingTemplate(null);

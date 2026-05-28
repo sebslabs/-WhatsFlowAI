@@ -98,12 +98,19 @@ export function TopBar() {
       fetchWaConfig();
     };
 
+    // Synchronize leads count across layout components in real-time
+    const handleLeadsUpdate = () => {
+      fetchSubData();
+    };
+
     window.addEventListener('profile-updated', handleProfileUpdate);
     window.addEventListener('whatsapp-updated', handleWaUpdate);
+    window.addEventListener('leads-updated', handleLeadsUpdate);
     
     return () => {
       window.removeEventListener('profile-updated', handleProfileUpdate);
       window.removeEventListener('whatsapp-updated', handleWaUpdate);
+      window.removeEventListener('leads-updated', handleLeadsUpdate);
     };
   }, []);
 
@@ -557,24 +564,24 @@ export function TopBar() {
                 <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 dark:text-gray-400">
                   <span>Leads Count</span>
                   <span className={cn(
-                    (subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500) >= 0.8 ? "text-amber-500 font-extrabold" : "",
-                    (subData.ai_conversation_used || 0) >= (subData.ai_conversation_limit || 1500) ? "text-red-500 font-extrabold" : ""
+                    activeLeadCount / (subData.ai_conversation_limit || 1500) >= 0.8 ? "text-amber-500 font-extrabold" : "",
+                    activeLeadCount >= (subData.ai_conversation_limit || 1500) ? "text-red-500 font-extrabold" : ""
                   )}>
-                    {(subData.ai_conversation_used || 0).toLocaleString()} / {subData.ai_conversation_limit?.toLocaleString() || '1,500'}
+                    {activeLeadCount.toLocaleString()} / {subData.ai_conversation_limit?.toLocaleString() || '1,500'}
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-500",
-                      (subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500) >= 1.0 ? "bg-red-500" :
-                      (subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500) >= 0.8 ? "bg-amber-500" : "bg-[#22C55E]"
+                      activeLeadCount / (subData.ai_conversation_limit || 1500) >= 1.0 ? "bg-red-500" :
+                      activeLeadCount / (subData.ai_conversation_limit || 1500) >= 0.8 ? "bg-amber-500" : "bg-[#22C55E]"
                     )}
-                    style={{ width: `${Math.min(100, ((subData.ai_conversation_used || 0) / (subData.ai_conversation_limit || 1500)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (activeLeadCount / (subData.ai_conversation_limit || 1500)) * 100)}%` }}
                   />
                 </div>
               </div>
-              {(subData.ai_conversation_used / subData.ai_conversation_limit >= 0.8 || ['trial', 'grace_period', 'expired', 'suspended'].includes(subData.subscription_status)) && (
+              {(activeLeadCount / subData.ai_conversation_limit >= 0.8 || ['trial', 'grace_period', 'expired', 'suspended'].includes(subData.subscription_status)) && (
                 <Button
                   size="sm"
                   variant="ghost"
